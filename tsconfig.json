@@ -16,7 +16,7 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [".\/\*"]
+      "@/*": ["./*"]
     }
   },
   "include": ["app", "components", "lib", "data"],
