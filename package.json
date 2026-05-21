@@ -3,13 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "npx @cloudflare/next-on-pages",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "preview": "npm run pages:build && wrangler pages dev .vercel/output/static",
-    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
-    "lint": "next lint"
-  },
+  "dev": "next dev",
+  "build": "next build",
+  "pages:build": "npx @cloudflare/next-on-pages",
+  "start": "next start",
+  "lint": "next lint"
+},
   "dependencies": {
     "lucide-react": "^0.263.1",
     "next": "15.1.0",
