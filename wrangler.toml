@@ -1,6 +1,6 @@
 name = "athletematch"
-main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-[env.production]
-route = "athletematch.pages.dev"
+pages_build_output_dir = ".vercel/output/static"
+
+
