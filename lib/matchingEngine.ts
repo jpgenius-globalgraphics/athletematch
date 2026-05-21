@@ -1,5 +1,7 @@
 import schools from "@/data/schools.json";
 
+export type Gender = "mens" | "womens";
+
 export interface AthleteProfile {
   gpa: number;
   satScore?: number;
@@ -17,12 +19,15 @@ export interface School {
   avgACT: number;
   division: string;
   conference: string;
-  programs: string[];
+  hasMensSoccer: boolean;
+  hasWomensSoccer: boolean;
+  mensUrl: string | null;
+  womensUrl: string | null;
   acceptanceRate: number;
   tuition: string;
   internationalPercentage: number;
+  tier: "elite" | "high" | "mid" | "accessible";
   notes: string;
-  tier: "elite" | "high" | "mid" | "accessible"; // For filtering
 }
 
 export interface MatchResult extends School {
@@ -39,7 +44,7 @@ const clubLevelTier: Record<string, number> = {
   "ea-usys": 35,
 };
 
-// Playing time scoring (reduced importance)
+// Playing time scoring
 const playingTimeScore: Record<string, number> = {
   "90mins": 100,
   regular: 85,
@@ -48,32 +53,40 @@ const playingTimeScore: Record<string, number> = {
   reserve: 20,
 };
 
-export function calculateMatches(profile: AthleteProfile): MatchResult[] {
-  const testScore = profile.satScore ? profile.satScore : (profile.actScore ? profile.actScore * 36 : 0);
+const IVY_NAMES = ["Harvard", "Yale", "Princeton", "University of Pennsylvania", "Dartmouth", "Brown", "Columbia", "Cornell"];
+const ELITE_ACC_NAMES = ["Stanford University", "University of North Carolina", "Duke University", "University of Virginia"];
+const TOP_D1_NAMES = [
+  "University of Michigan", "Ohio State University", "UCLA", "Northwestern University",
+  "Boston College", "Wake Forest University", "Notre Dame", "Georgetown University",
+  "Florida State University", "University of Maryland", "Indiana University",
+];
 
-  const matches: MatchResult[] = schools
+export function calculateMatches(profile: AthleteProfile, gender: Gender = "mens"): MatchResult[] {
+  const testScore = profile.satScore
+    ? profile.satScore
+    : profile.actScore
+    ? profile.actScore * 36
+    : 0;
+
+  // Only include schools that have a program for the selected gender
+  const eligibleSchools = (schools as School[]).filter((s) =>
+    gender === "mens" ? s.hasMensSoccer : s.hasWomensSoccer
+  );
+
+  const matches: MatchResult[] = eligibleSchools
     .map((school) => {
       let score = 0;
       const reasons: string[] = [];
       let athleticFit = "Match";
 
-      // HARD CONSTRAINT: Club level vs school tier
-      const isIvyLeague = ["Harvard", "Yale", "Princeton", "Penn", "Dartmouth", "Brown", "Columbia", "Cornell"].includes(school.name);
-      const isEliteACC = ["Stanford", "UNC", "Duke", "Virginia"].includes(school.name);
-      const isTopD1 = ["Michigan", "Ohio State", "UCLA", "Northwestern", "Boston College", "Wake Forest"].includes(school.name);
+      const isIvy = IVY_NAMES.some((n) => school.name.includes(n.split(" ")[0]) || school.name === n);
+      const isEliteACC = ELITE_ACC_NAMES.some((n) => school.name === n);
+      const isTopD1 = TOP_D1_NAMES.some((n) => school.name === n);
       const isMidD1 = school.tier === "high" || school.tier === "mid";
 
-      // Lower club levels can't recruit at elite/top D1 schools
+      // Hard constraint: club level vs school tier
       if (profile.clubLevel === "ea-usys") {
-        if (isIvyLeague || isEliteACC || isTopD1) {
-          return {
-            ...school,
-            matchScore: 0,
-            reasons: ["Club level too low for this program"],
-            athleticFit: "Not Viable",
-          };
-        }
-        if (isMidD1) {
+        if (isIvy || isEliteACC || isTopD1 || isMidD1) {
           return {
             ...school,
             matchScore: 0,
@@ -84,7 +97,7 @@ export function calculateMatches(profile: AthleteProfile): MatchResult[] {
       }
 
       if (profile.clubLevel === "lower-ecnl") {
-        if (isIvyLeague || isEliteACC || isTopD1) {
+        if (isIvy || isEliteACC || isTopD1) {
           return {
             ...school,
             matchScore: 0,
@@ -94,8 +107,8 @@ export function calculateMatches(profile: AthleteProfile): MatchResult[] {
         }
       }
 
-      // Ivy League minimum playing time requirement - only for LOWER club levels
-      if (isIvyLeague && (profile.playingTime === "substitute" || profile.playingTime === "reserve")) {
+      // Ivy League playing time constraint (lower club levels)
+      if (isIvy && (profile.playingTime === "substitute" || profile.playingTime === "reserve")) {
         if (profile.clubLevel === "lower-ecnl" || profile.clubLevel === "ea-usys") {
           return {
             ...school,
@@ -104,17 +117,10 @@ export function calculateMatches(profile: AthleteProfile): MatchResult[] {
             athleticFit: "Not Viable",
           };
         }
-        // MLS Next Academy/Club players can be subs at Ivy - they're elite enough
       }
 
-      // Academic fit (35% of score)
-      const gpaMatch = Math.min(100, (profile.gpa / school.avgGPA) * 100);
-      const satMatch = testScore ? Math.min(100, (testScore / school.avgSAT) * 100) : 100;
-      const academicScore = (gpaMatch + satMatch) / 2;
-      score += academicScore * 0.35;
-
-      // HARD CONSTRAINT: Elite schools need SAT 1360+ and GPA 3.6+
-      if (isIvyLeague || isEliteACC) {
+      // Hard constraint: elite schools need SAT 1360+ and GPA 3.6+
+      if (isIvy || isEliteACC) {
         if (testScore < 1360 || profile.gpa < 3.6) {
           return {
             ...school,
@@ -125,40 +131,44 @@ export function calculateMatches(profile: AthleteProfile): MatchResult[] {
         }
       }
 
+      // Academic fit (35%)
+      const gpaMatch = Math.min(100, (profile.gpa / school.avgGPA) * 100);
+      const satMatch = testScore ? Math.min(100, (testScore / school.avgSAT) * 100) : 100;
+      const academicScore = (gpaMatch + satMatch) / 2;
+      score += academicScore * 0.35;
+
       if (gpaMatch >= 95) reasons.push("Excellent GPA match");
       else if (gpaMatch >= 85) reasons.push("Strong GPA match");
       else if (gpaMatch < 70) reasons.push("GPA below school average");
 
-      // Club level (55% of score - DOMINANT FACTOR)
+      // Club level (55% — dominant factor)
       const clubScore = clubLevelTier[profile.clubLevel] || 50;
       score += clubScore * 0.55;
 
-      if (clubScore >= 85) reasons.push("Top club level - strong advantage");
-      if (clubScore >= 60 && clubScore < 85) reasons.push("Competitive club level");
-      if (clubScore < 60) reasons.push("Lower club level");
+      if (clubScore >= 85) reasons.push("Top club level — strong recruiting advantage");
+      else if (clubScore >= 60) reasons.push("Competitive club level");
+      else reasons.push("Lower club level");
 
-      // Playing time (10% of score - MINIMAL WEIGHT)
+      // Playing time (10%)
       const playingTimeValue = playingTimeScore[profile.playingTime] || 50;
       score += playingTimeValue * 0.1;
 
       if (playingTimeValue >= 85) reasons.push("Elite playing time");
 
-      // International player consideration (5% of score)
+      // International roster consideration (5%)
       let internationalBoost = 100;
-      if (profile.clubLevel === "mls-next-academy" || profile.clubLevel === "mls-next-club") {
-        // Top players less affected by international roster
-        internationalBoost = 100;
-      } else if (school.internationalPercentage > 60) {
-        // Lower club level players competing for limited spots
+      if (
+        profile.clubLevel !== "mls-next-academy" &&
+        profile.clubLevel !== "mls-next-club" &&
+        school.internationalPercentage > 60
+      ) {
         internationalBoost = 70;
         reasons.push(`High international roster (${school.internationalPercentage}%)`);
       }
       score += internationalBoost * 0.05;
 
-      // Normalize score
       score = Math.round(Math.max(0, Math.min(100, score)));
 
-      // Determine athletic fit category
       if (score >= 85) athleticFit = "Excellent Fit";
       else if (score >= 75) athleticFit = "Good Fit";
       else if (score >= 65) athleticFit = "Possible Fit";
