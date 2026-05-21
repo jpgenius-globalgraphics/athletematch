@@ -1,6 +1,5 @@
-export const runtime = 'edge';
 "use client";
-
+export const runtime = 'edge';
 import { useState } from "react";
 import { calculateMatches, filterByThreshold, type AthleteProfile, type MatchResult } from "@/lib/matchingEngine";
 import ResultCard from "@/components/ResultCard";
