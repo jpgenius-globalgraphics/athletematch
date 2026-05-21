@@ -1,0 +1,7 @@
+{
+  "env": "production",
+  "build": {
+    "command": "npm run build",
+    "cwd": "/opt/build/repo"
+  }
+}
