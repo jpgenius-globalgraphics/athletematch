@@ -4,7 +4,7 @@ A beautiful, AI-powered web application that helps athletes find the perfect col
 
 ## Features
 
-✨ **Smart Matching Algorithm** - Matches athletes with colleges based on:
+✨ **Smart Matching Algorithm* * - Matches athletes with colleges based on:
 - GPA and standardized test scores (SAT/ACT)
 - Athletic level and playing time
 - Club team competitiveness
