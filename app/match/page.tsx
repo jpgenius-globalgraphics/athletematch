@@ -12,9 +12,8 @@ export default function MatchPage() {
   const [profile, setProfile] = useState<AthleteProfile>({
     gpa: 3.5,
     satScore: 1200,
-    athleticLevel: "high",
+    clubLevel: "mls-next-club",
     playingTime: "regular",
-    clubLevel: "state",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,7 +41,7 @@ export default function MatchPage() {
           </Link>
 
           <div className="mb-12">
-            <h1 className="text-4xl font-bold mb-4">Your Matches</h1>
+            <h1 className="text-4xl font-bold mb-4">Your College Soccer Matches</h1>
             <p className="text-gray-400 mb-6">
               Found <span className="text-blue-400 font-semibold">{results.length}</span> schools that match your profile
             </p>
@@ -78,8 +77,8 @@ export default function MatchPage() {
         </Link>
 
         <div className="mb-12">
-          <h1 className="text-4xl font-bold mb-2">Find Your Match</h1>
-          <p className="text-gray-400">Answer a few questions about your academic and athletic profile</p>
+          <h1 className="text-4xl font-bold mb-2">Find Your College Soccer Match</h1>
+          <p className="text-gray-400">Answer a few questions about your academic and soccer profile</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -135,28 +134,34 @@ export default function MatchPage() {
             </div>
           </div>
 
-          {/* Athletic Section */}
+          {/* Soccer Profile Section */}
           <div className="glass rounded-xl p-8">
             <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <span className="text-purple-500">⚽</span> Athletic Profile
+              <span className="text-green-500">⚽</span> Soccer Profile
             </h2>
 
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-semibold mb-3">Athletic Level <span className="text-red-500">*</span></label>
-                <div className="grid grid-cols-2 gap-3">
-                  {["elite", "high", "medium", "low"].map((level) => (
+                <label className="block text-sm font-semibold mb-3">Club Level <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { value: "mls-next-academy", label: "MLS Next Academy", desc: "Elite level - MLS pathway" },
+                    { value: "mls-next-club", label: "MLS Next Club / Top ECNL", desc: "Very competitive - national level" },
+                    { value: "lower-ecnl", label: "Lower ECNL / Top ECRL", desc: "Competitive regional level" },
+                    { value: "ea-usys", label: "EA / E64 / USYS", desc: "Recreational to local competitive" },
+                  ].map((option) => (
                     <button
-                      key={level}
+                      key={option.value}
                       type="button"
-                      onClick={() => setProfile({ ...profile, athleticLevel: level as any })}
-                      className={`px-4 py-3 rounded-lg font-semibold transition-all ${
-                        profile.athleticLevel === level
-                          ? "gradient-primary text-white"
+                      onClick={() => setProfile({ ...profile, clubLevel: option.value as any })}
+                      className={`p-4 rounded-lg text-left transition-all ${
+                        profile.clubLevel === option.value
+                          ? "gradient-primary text-white ring-2 ring-blue-400"
                           : "glass hover:bg-white/10"
                       }`}
                     >
-                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                      <div className="font-semibold">{option.label}</div>
+                      <div className="text-xs text-gray-400 mt-1">{option.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -165,48 +170,24 @@ export default function MatchPage() {
               <div>
                 <label className="block text-sm font-semibold mb-3">Playing Time <span className="text-red-500">*</span></label>
                 <div className="space-y-2">
-                  {["90mins", "regular", "sometimes", "substitute", "reserve"].map((time) => (
-                    <label key={time} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white/5">
+                  {[
+                    { value: "90mins", label: "90 mins every game" },
+                    { value: "regular", label: "Regular starter" },
+                    { value: "sometimes", label: "Sometimes starts" },
+                    { value: "substitute", label: "Substitute" },
+                    { value: "reserve", label: "Reserve player" },
+                  ].map((option) => (
+                    <label key={option.value} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white/5">
                       <input
                         type="radio"
                         name="playingTime"
-                        value={time}
-                        checked={profile.playingTime === time}
+                        value={option.value}
+                        checked={profile.playingTime === option.value}
                         onChange={(e) => setProfile({ ...profile, playingTime: e.target.value as any })}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm font-medium">
-                        {time === "90mins"
-                          ? "90 mins every game"
-                          : time === "regular"
-                          ? "Regular starter"
-                          : time === "sometimes"
-                          ? "Sometimes starts"
-                          : time === "substitute"
-                          ? "Substitute"
-                          : "Reserve player"}
-                      </span>
+                      <span className="text-sm font-medium">{option.label}</span>
                     </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-3">Club Level <span className="text-red-500">*</span></label>
-                <div className="grid grid-cols-2 gap-3">
-                  {["national", "state", "regional", "local"].map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setProfile({ ...profile, clubLevel: level as any })}
-                      className={`px-4 py-3 rounded-lg font-semibold transition-all ${
-                        profile.clubLevel === level
-                          ? "gradient-primary text-white"
-                          : "glass hover:bg-white/10"
-                      }`}
-                    >
-                      {level.charAt(0).toUpperCase() + level.slice(1)}
-                    </button>
                   ))}
                 </div>
               </div>
@@ -218,7 +199,7 @@ export default function MatchPage() {
             disabled={loading}
             className="w-full px-8 py-4 rounded-lg gradient-primary text-white font-semibold hover:shadow-lg hover:shadow-blue-500/50 transition-all disabled:opacity-50"
           >
-            {loading ? "Finding Matches..." : "Find My Matches"}
+            {loading ? "Finding Matches..." : "Find My College Matches"}
           </button>
         </form>
       </div>

@@ -13,15 +13,15 @@ export default function ResultCard({ school }: ResultCardProps) {
 
   const getScoreColor = (score: number) => {
     if (score >= 85) return "text-green-400";
-    if (score >= 70) return "text-blue-400";
-    if (score >= 60) return "text-yellow-400";
+    if (score >= 75) return "text-blue-400";
+    if (score >= 65) return "text-yellow-400";
     return "text-orange-400";
   };
 
   const getScoreBg = (score: number) => {
     if (score >= 85) return "bg-green-500/20 border-green-500/30";
-    if (score >= 70) return "bg-blue-500/20 border-blue-500/30";
-    if (score >= 60) return "bg-yellow-500/20 border-yellow-500/30";
+    if (score >= 75) return "bg-blue-500/20 border-blue-500/30";
+    if (score >= 65) return "bg-yellow-500/20 border-yellow-500/30";
     return "bg-orange-500/20 border-orange-500/30";
   };
 
@@ -32,7 +32,7 @@ export default function ResultCard({ school }: ResultCardProps) {
         className="w-full px-8 py-6 flex items-start justify-between hover:bg-white/5 transition-colors"
       >
         <div className="flex-1 text-left">
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-4 mb-3 flex-wrap">
             <h3 className="text-2xl font-bold">{school.name}</h3>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-white/10">
               {school.division} - {school.conference}
@@ -40,12 +40,16 @@ export default function ResultCard({ school }: ResultCardProps) {
           </div>
           <p className="text-gray-400 mb-3">{school.location}</p>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 mb-3">
             {school.reasons.map((reason, i) => (
               <span key={i} className="text-sm bg-white/10 px-3 py-1 rounded-full">
                 {reason}
               </span>
             ))}
+          </div>
+
+          <div className="text-sm text-gray-400">
+            <span className="font-semibold text-blue-400">International: </span>{school.internationalPercentage}%
           </div>
         </div>
 
@@ -55,10 +59,11 @@ export default function ResultCard({ school }: ResultCardProps) {
               getScoreBg(school.matchScore)
             }`}
           >
-            <span className="text-xs font-semibold text-gray-400 mb-1">Match Score</span>
+            <span className="text-xs font-semibold text-gray-400 mb-1">Match</span>
             <span className={`text-3xl font-bold ${getScoreColor(school.matchScore)}`}>
               {school.matchScore}%
             </span>
+            <span className="text-xs text-gray-300 mt-1">{school.athleticFit}</span>
           </div>
           <ChevronDown
             className={`w-5 h-5 transition-transform ${expanded ? "rotate-180" : ""}`}
@@ -70,7 +75,7 @@ export default function ResultCard({ school }: ResultCardProps) {
         <div className="border-t border-white/10 px-8 py-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Academic Requirements</h4>
+              <h4 className="text-sm font-semibold text-gray-400 mb-3">Academic Standards</h4>
               <div className="space-y-2 text-sm">
                 <p>
                   <span className="text-gray-400">Avg GPA:</span>{" "}
@@ -92,33 +97,33 @@ export default function ResultCard({ school }: ResultCardProps) {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Tuition & Athletics</h4>
+              <h4 className="text-sm font-semibold text-gray-400 mb-3">Program Details</h4>
               <div className="space-y-2 text-sm">
                 <p>
                   <span className="text-gray-400">Tuition:</span>{" "}
                   <span className="font-semibold">{school.tuition}</span>
                 </p>
                 <p>
-                  <span className="text-gray-400">Athletic Level:</span>{" "}
-                  <span className="font-semibold capitalize">{school.athleticLevel}</span>
+                  <span className="text-gray-400">Division:</span>{" "}
+                  <span className="font-semibold">{school.division} {school.conference}</span>
                 </p>
                 <p>
-                  <span className="text-gray-400">Programs:</span>{" "}
-                  <span className="font-semibold">{school.programs.join(", ")}</span>
+                  <span className="text-gray-400">International:</span>{" "}
+                  <span className="font-semibold">{school.internationalPercentage}% of roster</span>
                 </p>
               </div>
             </div>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-gray-400 mb-2">Recruiting Notes</h4>
+            <h4 className="text-sm font-semibold text-gray-400 mb-2">Program Notes</h4>
             <p className="text-sm text-gray-300">{school.notes}</p>
           </div>
 
           <div className="flex gap-3 pt-4">
             <a
               href={`https://www.google.com/search?q=${encodeURIComponent(
-                school.name + " athletics recruiting"
+                school.name + " women's soccer"
               )}`}
               target="_blank"
               rel="noopener noreferrer"
