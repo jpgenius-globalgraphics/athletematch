@@ -63,7 +63,7 @@ export default function ResultCard({ school, gender }: ResultCardProps) {
           <div className={`min-w-[96px] rounded-lg border px-4 py-3 text-center ${scoreTone(school.matchScore)}`}>
             <div className="text-xs font-bold uppercase tracking-wide">Fit</div>
             <div className="text-3xl font-black leading-none">{school.matchScore}</div>
-            <div className="mt-1 text-xs font-bold">{school.athleticFit}</div>
+            <div className="mt-1 text-xs font-bold">{school.fitLabel}</div>
           </div>
           <ChevronDown className={`h-5 w-5 text-[var(--muted)] transition-transform ${expanded ? "rotate-180" : ""}`} />
         </div>
@@ -72,10 +72,10 @@ export default function ResultCard({ school, gender }: ResultCardProps) {
       {expanded && (
         <div className="border-t border-[var(--line)] p-5">
           <div className="grid gap-4 md:grid-cols-4">
-            <Metric icon={<Trophy className="h-4 w-4" />} label="Athletic" value={school.scoreBreakdown.athletic} />
-            <Metric icon={<GraduationCap className="h-4 w-4" />} label="Academic" value={school.scoreBreakdown.academic} />
-            <Metric icon={<MapPin className="h-4 w-4" />} label="Preference" value={school.scoreBreakdown.preference} />
-            <Metric icon={<Percent className="h-4 w-4" />} label="Roster" value={school.scoreBreakdown.roster} />
+            <Metric icon={<Trophy className="h-4 w-4" />} label="Athletic" value={school.scoreBreakdown.athleticFit} />
+            <Metric icon={<GraduationCap className="h-4 w-4" />} label="Academic" value={school.scoreBreakdown.academicFit} />
+            <Metric icon={<MapPin className="h-4 w-4" />} label="Campus" value={school.scoreBreakdown.campusFit} />
+            <Metric icon={<Percent className="h-4 w-4" />} label="Financial" value={school.scoreBreakdown.financialFit} />
           </div>
 
           <div className="mt-5 grid gap-5 md:grid-cols-2">

@@ -2,7 +2,15 @@ import schools from "@/data/schools.json";
 
 export type Gender = "mens" | "womens";
 export type Division = "D1" | "D2" | "D3";
-export type Region = "Northeast" | "Mid-Atlantic" | "South" | "Southeast" | "Southwest" | "Midwest" | "West" | "Other";
+export type Region =
+  | "Northeast"
+  | "Mid-Atlantic"
+  | "South"
+  | "Southeast"
+  | "Southwest"
+  | "Midwest"
+  | "West"
+  | "Other";
 export type EnrollmentPreference = "small" | "medium" | "large" | "any";
 export type AreaOfStudy = "stem" | "business" | "liberal-arts" | "pre-med" | "arts" | "undecided";
 export type FinancialAidPriority = "athletic" | "need-based" | "academic-merit" | "none";
@@ -49,17 +57,40 @@ export interface School {
   enrollment?: number;
 }
 
+export interface ScoreBreakdown {
+  athleticFit: number;
+  academicFit: number;
+  campusFit: number;
+  financialFit: number;
+}
+
 export interface MatchResult extends School {
   matchScore: number;
   reasons: string[];
-  athleticFit: "Strong fit" | "Target" | "Reach" | "Safety" | "Long shot";
-  scoreBreakdown: {
-    athletic: number;
-    academic: number;
-    preference: number;
-    roster: number;
-  };
+  fitLabel: "Strong fit" | "Target" | "Reach" | "Long shot" | "Stretch";
+  scoreBreakdown: ScoreBreakdown;
 }
+
+export const MIN_MATCH_SCORE = 60;
+export const MAX_RESULTS = 15;
+
+// =====================================================================
+// Architecture
+// =====================================================================
+// calculateMatches() runs five layers in order:
+//
+//   1. Eligibility       — must sponsor the requested gender's soccer.
+//   2. Hard filtering    — division/region restrictions, NCAA aid rules,
+//                          enrollment extremes, athletic overreach.
+//   3. Dimension scoring — four independent 0-100 floats, NOT rounded.
+//   4. Composite + drag  — weighted sum minus a penalty for any low dim.
+//   5. Diversity rerank  — greedy MMR penalizing same-conference repeats.
+//
+// Each layer is self-contained so it can be tuned or replaced without
+// rippling through the others. Sorting always uses the unrounded float.
+// =====================================================================
+
+// ---------- Constants ----------
 
 const clubLevelScore: Record<AthleteProfile["clubLevel"], number> = {
   "pro-academy": 98,
@@ -83,48 +114,21 @@ const divisionDemand: Record<Division, Record<School["tier"], number>> = {
   D3: { elite: 76, high: 68, mid: 56, accessible: 46 },
 };
 
-const academicWeightByTier: Record<School["tier"], number> = {
-  elite: 0.34,
-  high: 0.28,
-  mid: 0.22,
-  accessible: 0.18,
-};
+// ---------- Helpers ----------
 
-function clamp(value: number, min = 0, max = 100) {
+function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function testScore(profile: AthleteProfile) {
+function testScoreOf(profile: AthleteProfile): number | null {
   if (profile.satScore) return profile.satScore;
   if (profile.actScore) return Math.round((profile.actScore / 36) * 1600);
   return null;
 }
 
-function academicScore(profile: AthleteProfile, school: School) {
-  const gpaScore = clamp(78 + (profile.gpa - school.avgGPA) * 28);
-  const score = testScore(profile);
-  const testMatch = score ? clamp(78 + ((score - school.avgSAT) / 160) * 12) : 82;
-  return Math.round(gpaScore * 0.62 + testMatch * 0.38);
+function playerLevel(profile: AthleteProfile): number {
+  return clubLevelScore[profile.clubLevel] * 0.68 + playingTimeScore[profile.playingTime] * 0.32;
 }
-
-function athleticScore(profile: AthleteProfile, school: School) {
-  const playerLevel = clubLevelScore[profile.clubLevel] * 0.68 + playingTimeScore[profile.playingTime] * 0.32;
-  const demand = divisionDemand[school.division][school.tier];
-  const gap = playerLevel - demand;
-  const score = gap >= 0 ? 100 - gap * 0.45 : 100 + gap * 1.35;
-  return Math.round(clamp(score));
-}
-
-function preferenceScore(profile: AthleteProfile, school: School) {
-  const divisionFit = profile.preferredDivisions.length === 0 || profile.preferredDivisions.includes(school.division) ? 100 : 74;
-  const regionFit = profile.preferredRegions.length === 0 || (school.region && profile.preferredRegions.includes(school.region)) ? 100 : 82;
-  return Math.round(divisionFit * 0.6 + regionFit * 0.4);
-}
-
-// Enrollment now comes from College Scorecard for ~911/1037 schools (see
-// scripts/backfill_schools.py). The remaining ~126 fall back to the heuristic
-// below. Programs and aid-type are still proxied from name/conference/tier
-// patterns — affects ranking but not authoritative.
 
 function enrollmentBandFromHeuristic(school: School): "small" | "medium" | "large" {
   if (school.division === "D3" && school.private) return "small";
@@ -134,7 +138,7 @@ function enrollmentBandFromHeuristic(school: School): "small" | "medium" | "larg
   return "medium";
 }
 
-function estimatedEnrollmentBand(school: School): "small" | "medium" | "large" {
+function enrollmentBand(school: School): "small" | "medium" | "large" {
   if (typeof school.enrollment === "number") {
     if (school.enrollment < 5000) return "small";
     if (school.enrollment < 15000) return "medium";
@@ -143,208 +147,349 @@ function estimatedEnrollmentBand(school: School): "small" | "medium" | "large" {
   return enrollmentBandFromHeuristic(school);
 }
 
-function enrollmentDelta(school: School, preference: EnrollmentPreference | undefined): number {
-  if (!preference || preference === "any") return 0;
-  const band = estimatedEnrollmentBand(school);
-  if (band === preference) return 4;
-  if ((preference === "small" && band === "large") || (preference === "large" && band === "small")) return -6;
-  return -2;
-}
-
-function areaOfStudyDelta(school: School, area: AreaOfStudy | undefined): number {
-  if (!area || area === "undecided") return 0;
+// Programmatic strength for an area of study. Without per-school program data
+// this is heuristic — name patterns (STEM/Arts), tier (Pre-med), and identity
+// (private liberal-arts D3 colleges) carry most signal.
+function areaStrength(school: School, area: AreaOfStudy | undefined): "strong" | "moderate" | "weak" {
+  if (!area || area === "undecided") return "moderate";
   const name = school.name;
   switch (area) {
     case "stem":
-      if (/(Institute of Technology|Polytechnic|\bTech\b|Technological)/.test(name)) return 8;
-      if (school.tier === "elite" || school.tier === "high") return 3;
-      return 0;
+      if (/(Institute of Technology|Polytechnic|\bTech\b|Technological)/.test(name)) return "strong";
+      if (school.tier === "elite" || school.tier === "high") return "moderate";
+      return "weak";
     case "business":
-      if (school.tier === "elite") return 3;
-      if (school.tier === "high") return 2;
-      return 1;
+      if (school.tier === "elite" || school.tier === "high") return "strong";
+      return "moderate";
     case "liberal-arts": {
-      const isCollegeNamed = /^[^,]*\bCollege\b/.test(school.name);
-      if (school.private && school.division === "D3" && isCollegeNamed) return 8;
-      if (school.private && (school.tier === "elite" || school.tier === "high")) return 4;
-      return 0;
+      const collegeNamed = /^[^,]*\bCollege\b/.test(name);
+      if (school.private && school.division === "D3" && collegeNamed) return "strong";
+      if (school.private && (school.tier === "elite" || school.tier === "high")) return "strong";
+      if (school.private && school.tier === "mid") return "moderate";
+      return "weak";
     }
     case "pre-med":
-      if (school.tier === "elite") return 5;
-      if (school.tier === "high") return 2;
-      return 0;
+      if (school.tier === "elite") return "strong";
+      if (school.tier === "high") return "moderate";
+      return "weak";
     case "arts":
-      if (/(Conservatory|School of (the )?Arts|Art Institute)/i.test(name)) return 8;
-      if (school.private && school.tier !== "accessible") return 2;
-      return 0;
+      if (/(Conservatory|School of (the )?Arts|Art Institute)/i.test(name)) return "strong";
+      if (school.private && school.tier !== "accessible") return "moderate";
+      return "weak";
     default:
-      return 0;
+      return "moderate";
   }
 }
 
-// Returns { delta } for soft adjustments, or { exclude } when NCAA rules make
-// the aid type unavailable. Athletic scholarships: D3 prohibits (bylaw 15.01.3),
-// Ivy League D1 also does not offer them by conference policy.
-function financialAidEffect(
-  school: School,
-  priority: FinancialAidPriority | undefined
-): { delta: number; exclude?: string; reason?: string } {
-  if (!priority || priority === "none") return { delta: 0 };
-  switch (priority) {
-    case "athletic":
-      if (school.division === "D3") return { delta: 0, exclude: "NCAA D3 schools cannot offer athletic scholarships" };
-      if (school.conference === "The Ivy League") return { delta: 0, exclude: "Ivy League programs do not offer athletic scholarships" };
-      if (school.division === "D1") return { delta: 4, reason: "D1 athletic aid available" };
-      return { delta: 2, reason: "D2 athletic aid available" };
-    case "need-based":
-      if (school.private && (school.tier === "elite" || school.tier === "high")) return { delta: 5, reason: "Strong need-based aid" };
-      if (school.private) return { delta: 2 };
-      return { delta: 0 };
-    case "academic-merit":
-      if (school.tier === "elite") return { delta: -3 };
-      if (school.private && (school.tier === "high" || school.tier === "mid")) return { delta: 5, reason: "Merit aid common at this school" };
-      if (school.tier === "high") return { delta: 3 };
-      if (school.tier === "mid") return { delta: 2 };
-      return { delta: 0 };
+// ---------- Layer 2: Hard filtering ----------
+
+function hardFilterReason(profile: AthleteProfile, school: School): string | null {
+  const player = clubLevelScore[profile.clubLevel];
+  const ts = testScoreOf(profile);
+
+  // Athletic overreach
+  if (school.tier === "elite" && player < 74) return "Elite programs need a national-level club profile";
+  if (school.division === "D1" && school.tier !== "accessible" && player < 58) {
+    return "Most D1 programs are a stretch from a local-only profile";
   }
-}
+  if (school.tier === "elite" && profile.gpa < 3.55) return "GPA below typical range for elite programs";
+  if (school.tier === "elite" && ts !== null && ts < 1320) return "Test score below elite-program range";
 
-function rosterScore(profile: AthleteProfile, school: School) {
-  const playerLevel = clubLevelScore[profile.clubLevel];
-  if (school.internationalPercentage >= 35 && playerLevel < 74) return 70;
-  if (school.internationalPercentage >= 25 && playerLevel < 58) return 76;
-  return 92;
-}
-
-function hardConstraint(profile: AthleteProfile, school: School) {
-  const score = testScore(profile);
-  const playerLevel = clubLevelScore[profile.clubLevel];
-
-  if (school.tier === "elite" && playerLevel < 74) {
-    return "Elite programs usually need a national-level club profile";
+  // Division restriction: user picked 1-2 divisions, school must match
+  if (profile.preferredDivisions.length > 0 && profile.preferredDivisions.length < 3) {
+    if (!profile.preferredDivisions.includes(school.division)) return "Outside preferred divisions";
   }
 
-  if (school.division === "D1" && school.tier !== "accessible" && playerLevel < 58) {
-    return "Most competitive D1 programs are a stretch from a local-only profile";
+  // Region restriction: any picked regions become a hard filter
+  if (profile.preferredRegions.length > 0) {
+    if (!school.region || !profile.preferredRegions.includes(school.region)) return "Outside preferred regions";
   }
 
-  if (school.tier === "elite" && profile.gpa < 3.55) {
-    return "Academic profile is below the usual range for this school";
+  // Athletic scholarship: NCAA D3 + Ivy League prohibit
+  if (profile.financialAidPriority === "athletic") {
+    if (school.division === "D3") return "NCAA D3 cannot offer athletic scholarships";
+    if (school.conference === "The Ivy League") return "Ivy League does not offer athletic scholarships";
   }
 
-  if (school.tier === "elite" && score && score < 1320) {
-    return "Test score is below the usual range for this school";
+  // Enrollment extremes (only when we have real numbers)
+  if (typeof school.enrollment === "number") {
+    if (profile.enrollmentPreference === "small" && school.enrollment > 20000) {
+      return "Too large for small-campus preference";
+    }
+    if (profile.enrollmentPreference === "large" && school.enrollment < 2000) {
+      return "Too small for large-campus preference";
+    }
   }
 
   return null;
 }
 
-function fitLabel(score: number): MatchResult["athleticFit"] {
-  if (score >= 88) return "Strong fit";
-  if (score >= 78) return "Target";
-  if (score >= 67) return "Reach";
-  if (score >= 58) return "Long shot";
-  return "Safety";
+// ---------- Layer 3: Dimension scoring ----------
+// Each returns an unrounded 0-100 float.
+
+function athleticFitDim(profile: AthleteProfile, school: School): number {
+  const player = playerLevel(profile);
+  const demand = divisionDemand[school.division][school.tier];
+  const gap = player - demand;
+  // Curve: at demand → 80; sweet spot +6 → 88 (peak); overqualified declines
+  // because the athlete would be underutilized. Below demand drops steeply.
+  let base: number;
+  if (gap < -15) base = 55 + (gap + 15) * 2.8;
+  else if (gap < 0) base = 80 + gap * 1.67;
+  else if (gap <= 6) base = 80 + gap * 1.33;
+  else if (gap <= 16) base = 88 - (gap - 6) * 0.5;
+  else base = 83 - (gap - 16) * 0.8;
+  // Roster realism: high international intake at a level the athlete cannot reach
+  if (school.internationalPercentage >= 35 && player < 74) base -= 6;
+  else if (school.internationalPercentage >= 25 && player < 58) base -= 4;
+  return clamp(base);
 }
 
-function reasonsFor(
-  profile: AthleteProfile,
-  school: School,
-  breakdown: MatchResult["scoreBreakdown"],
-  aidReason?: string
-) {
-  const reasons: string[] = [];
+function academicFitDim(profile: AthleteProfile, school: School): number {
+  // At parity → 80; comfortably above → 90+ (academic safety); below → drops steeply.
+  const gpaGap = profile.gpa - school.avgGPA;
+  let gpaPart: number;
+  if (gpaGap >= 0) gpaPart = 80 + Math.min(gpaGap * 30, 12);
+  else if (gpaGap >= -0.4) gpaPart = 80 + gpaGap * 50;
+  else gpaPart = 60 + (gpaGap + 0.4) * 45;
 
-  if (breakdown.athletic >= 86) reasons.push("Soccer level lines up well");
-  else if (breakdown.athletic >= 72) reasons.push("Athletic profile is in range");
-  else reasons.push("Athletic fit is a reach");
+  const ts = testScoreOf(profile);
+  let testPart: number;
+  if (ts === null) {
+    testPart = 65;
+  } else {
+    const testGap = ts - school.avgSAT;
+    if (testGap >= 0) testPart = 80 + Math.min(testGap / 25, 12);
+    else if (testGap >= -150) testPart = 80 + (testGap / 150) * 25;
+    else testPart = 55 + ((testGap + 150) / 100) * 20;
+  }
+  return clamp(gpaPart * 0.55 + testPart * 0.45);
+}
 
-  if (breakdown.academic >= 88) reasons.push("Strong academic match");
-  else if (breakdown.academic < 68) reasons.push("Academic reach");
-
-  if (profile.preferredDivisions.length < 3 && profile.preferredDivisions.includes(school.division)) reasons.push(`${school.division} preference`);
-  if (school.region && profile.preferredRegions.includes(school.region)) reasons.push(`${school.region} region`);
-
-  if (profile.enrollmentPreference && profile.enrollmentPreference !== "any") {
-    if (estimatedEnrollmentBand(school) === profile.enrollmentPreference) {
-      reasons.push(`${profile.enrollmentPreference[0].toUpperCase()}${profile.enrollmentPreference.slice(1)} campus`);
+function campusFitDim(profile: AthleteProfile, school: School): number {
+  // Lower neutral baselines so explicit preferences create a real spread.
+  let enrollPart: number;
+  if (!profile.enrollmentPreference || profile.enrollmentPreference === "any") {
+    enrollPart = 65;
+  } else {
+    const band = enrollmentBand(school);
+    if (band === profile.enrollmentPreference) enrollPart = 95;
+    else if (
+      (profile.enrollmentPreference === "small" && band === "large") ||
+      (profile.enrollmentPreference === "large" && band === "small")
+    ) {
+      enrollPart = 30;
+    } else {
+      enrollPart = 55;
     }
   }
-  if (profile.areaOfStudy && profile.areaOfStudy !== "undecided" && areaOfStudyDelta(school, profile.areaOfStudy) >= 5) {
-    reasons.push("Aligned with your major");
-  }
-  if (aidReason) reasons.push(aidReason);
+  const regionPart = profile.preferredRegions.length === 0 ? 65 : 92;
+  const divisionPart = profile.preferredDivisions.length === 3 ? 65 : 92;
 
-  if (school.hasMensSoccer && school.hasWomensSoccer) reasons.push("Men's and women's programs");
-  if (school.hbcu) reasons.push("HBCU");
+  const strength = areaStrength(school, profile.areaOfStudy);
+  const areaPart = strength === "strong" ? 95 : strength === "moderate" ? 65 : 38;
 
-  return reasons.slice(0, 4);
+  return clamp(enrollPart * 0.35 + regionPart * 0.2 + divisionPart * 0.15 + areaPart * 0.3);
 }
 
-export const MIN_MATCH_SCORE = 60;
-export const MAX_RESULTS = 15;
+function financialFitDim(profile: AthleteProfile, school: School): number {
+  const priority = profile.financialAidPriority;
+  if (!priority || priority === "none") return 65;
+  switch (priority) {
+    case "athletic":
+      // D3/Ivy already hard-filtered
+      if (school.division === "D1") return 92;
+      if (school.division === "D2") return 75;
+      return 55;
+    case "need-based":
+      if (school.private && school.tier === "elite") return 92;
+      if (school.private && school.tier === "high") return 82;
+      if (school.private && school.tier === "mid") return 68;
+      if (school.tier === "elite" || school.tier === "high") return 55;
+      return 40;
+    case "academic-merit":
+      if (school.tier === "elite") return 30; // top elites typically don't offer merit-only aid
+      if (school.private && (school.tier === "high" || school.tier === "mid")) return 90;
+      if (school.tier === "high") return 72;
+      if (school.tier === "mid") return 68;
+      return 55;
+  }
+}
+
+// ---------- Layer 4: Composite + drag ----------
+
+function dragPenalty(d: ScoreBreakdown): number {
+  let p = 0;
+  if (d.athleticFit < 60) p += (60 - d.athleticFit) * 0.5;
+  if (d.academicFit < 55) p += (55 - d.academicFit) * 0.4;
+  if (d.campusFit < 45) p += (45 - d.campusFit) * 0.35;
+  if (d.financialFit < 45) p += (45 - d.financialFit) * 0.3;
+  return p;
+}
+
+function composite(d: ScoreBreakdown): number {
+  const weighted = d.athleticFit * 0.42 + d.academicFit * 0.25 + d.campusFit * 0.18 + d.financialFit * 0.15;
+  return clamp(weighted - dragPenalty(d));
+}
+
+function fitLabelFor(score: number): MatchResult["fitLabel"] {
+  if (score >= 88) return "Strong fit";
+  if (score >= 78) return "Target";
+  if (score >= 68) return "Reach";
+  if (score >= 60) return "Long shot";
+  return "Stretch";
+}
+
+// ---------- Explanations ----------
+// Each reason references a specific user choice when one drove the match.
+
+function explanationsFor(profile: AthleteProfile, school: School, dims: ScoreBreakdown): string[] {
+  const out: string[] = [];
+
+  // Athletic
+  if (dims.athleticFit >= 88) out.push("Athletic level aligns well with program demand");
+  else if (dims.athleticFit >= 72) out.push("Athletic profile is in range");
+  else if (dims.athleticFit < 60) out.push("Athletic fit is a stretch");
+
+  // Academic
+  if (dims.academicFit >= 85) {
+    const ts = testScoreOf(profile);
+    if (ts !== null) out.push(`Academic profile near ${school.avgSAT} SAT / ${school.avgGPA.toFixed(2)} GPA range`);
+    else out.push(`GPA in range for ${school.avgGPA.toFixed(2)} average`);
+  } else if (dims.academicFit < 60) {
+    out.push("Academics are a reach");
+  }
+
+  // Enrollment preference
+  if (profile.enrollmentPreference && profile.enrollmentPreference !== "any") {
+    if (enrollmentBand(school) === profile.enrollmentPreference) {
+      const real = school.enrollment;
+      const detail = typeof real === "number" ? ` (~${real.toLocaleString()} students)` : "";
+      out.push(`Matches your ${profile.enrollmentPreference}-campus preference${detail}`);
+    }
+  }
+
+  // Area of study (strong signal only)
+  if (profile.areaOfStudy && profile.areaOfStudy !== "undecided") {
+    const strength = areaStrength(school, profile.areaOfStudy);
+    if (strength === "strong") {
+      const label =
+        profile.areaOfStudy === "stem"
+          ? "STEM"
+          : profile.areaOfStudy === "liberal-arts"
+            ? "liberal arts"
+            : profile.areaOfStudy === "pre-med"
+              ? "pre-med"
+              : profile.areaOfStudy;
+      out.push(`Strong ${label} offerings for your interest`);
+    }
+  }
+
+  // Financial aid
+  if (profile.financialAidPriority === "athletic" && school.division !== "D3") {
+    out.push(`${school.division} athletic scholarship opportunity`);
+  } else if (
+    profile.financialAidPriority === "need-based" &&
+    school.private &&
+    (school.tier === "elite" || school.tier === "high")
+  ) {
+    out.push("Strong institutional need-based aid");
+  } else if (profile.financialAidPriority === "academic-merit" && school.private && school.tier !== "elite") {
+    out.push("Merit aid commonly offered here");
+  }
+
+  // Explicit region / division pref
+  if (school.region && profile.preferredRegions.includes(school.region)) {
+    out.push(`${school.region} region match`);
+  }
+  if (profile.preferredDivisions.length < 3 && profile.preferredDivisions.includes(school.division)) {
+    out.push(`${school.division} program`);
+  }
+
+  if (school.hbcu) out.push("HBCU");
+
+  return out.slice(0, 4);
+}
+
+// ---------- Layer 5: Diversity rerank ----------
+// Greedy MMR-style pass. After each pick we add a penalty to remaining candidates
+// that share its conference (-4 each) or (division, tier) bin (-1.5 each). The
+// adjusted score chooses the next pick. Fully deterministic.
 
 type RankedMatch = MatchResult & { _precise: number };
 
+function diversityRerank(ranked: RankedMatch[], max: number): RankedMatch[] {
+  const final: RankedMatch[] = [];
+  const seenConf = new Map<string, number>();
+  const seenBin = new Map<string, number>();
+  const remaining = ranked.slice();
+
+  while (final.length < max && remaining.length > 0) {
+    let bestIdx = 0;
+    let bestAdj = -Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const c = remaining[i];
+      const confCount = seenConf.get(c.conference) ?? 0;
+      const binCount = seenBin.get(`${c.division}/${c.tier}`) ?? 0;
+      const adj = c._precise - (confCount * 4 + binCount * 1.5);
+      if (adj > bestAdj) {
+        bestAdj = adj;
+        bestIdx = i;
+      }
+    }
+    const [picked] = remaining.splice(bestIdx, 1);
+    final.push(picked);
+    seenConf.set(picked.conference, (seenConf.get(picked.conference) ?? 0) + 1);
+    seenBin.set(`${picked.division}/${picked.tier}`, (seenBin.get(`${picked.division}/${picked.tier}`) ?? 0) + 1);
+  }
+  return final;
+}
+
+// ---------- Public API ----------
+
 export function calculateMatches(profile: AthleteProfile, gender: Gender = "mens"): MatchResult[] {
-  const eligibleSchools = (schools as School[]).filter((school) =>
-    gender === "mens" ? school.hasMensSoccer : school.hasWomensSoccer
-  );
+  const eligible = (schools as School[]).filter((s) => (gender === "mens" ? s.hasMensSoccer : s.hasWomensSoccer));
 
   const ranked: RankedMatch[] = [];
 
-  for (const school of eligibleSchools) {
-    const constraint = hardConstraint(profile, school);
-    if (constraint) continue;
+  for (const school of eligible) {
+    if (hardFilterReason(profile, school)) continue;
 
-    const aid = financialAidEffect(school, profile.financialAidPriority);
-    if (aid.exclude) continue;
-
-    const breakdown = {
-      athletic: athleticScore(profile, school),
-      academic: academicScore(profile, school),
-      preference: preferenceScore(profile, school),
-      roster: rosterScore(profile, school),
+    const dims: ScoreBreakdown = {
+      athleticFit: athleticFitDim(profile, school),
+      academicFit: academicFitDim(profile, school),
+      campusFit: campusFitDim(profile, school),
+      financialFit: financialFitDim(profile, school),
     };
 
-    const academicWeight = academicWeightByTier[school.tier];
-    const baseScore =
-      breakdown.athletic * 0.46 +
-      breakdown.academic * academicWeight +
-      breakdown.preference * 0.16 +
-      breakdown.roster * (0.38 - academicWeight);
-
-    // Per-school adjustments — these break ties left by the discrete (division, tier)
-    // bins above by injecting real per-school signal.
-    const precise = clamp(
-      baseScore +
-        enrollmentDelta(school, profile.enrollmentPreference) +
-        areaOfStudyDelta(school, profile.areaOfStudy) +
-        aid.delta
-    );
+    const precise = composite(dims);
     const matchScore = Math.round(precise);
     if (matchScore < MIN_MATCH_SCORE) continue;
 
     ranked.push({
       ...school,
       matchScore,
-      reasons: reasonsFor(profile, school, breakdown, aid.reason),
-      athleticFit: fitLabel(matchScore),
-      scoreBreakdown: breakdown,
+      reasons: explanationsFor(profile, school, dims),
+      fitLabel: fitLabelFor(matchScore),
+      scoreBreakdown: {
+        athleticFit: Math.round(dims.athleticFit),
+        academicFit: Math.round(dims.academicFit),
+        campusFit: Math.round(dims.campusFit),
+        financialFit: Math.round(dims.financialFit),
+      },
       _precise: precise,
     });
   }
 
-  // Sort on the unrounded float so schools that round to the same integer still
-  // rank by their true score gap; localeCompare is a final deterministic fallback.
   ranked.sort((a, b) => {
     if (b._precise !== a._precise) return b._precise - a._precise;
     return a.name.localeCompare(b.name);
   });
 
-  return ranked.slice(0, MAX_RESULTS).map(({ _precise, ...rest }) => rest);
+  const diversified = diversityRerank(ranked, MAX_RESULTS);
+  return diversified.map(({ _precise, ...rest }) => rest);
 }
 
 export function filterByThreshold(matches: MatchResult[], threshold = MIN_MATCH_SCORE): MatchResult[] {
-  return matches.filter((match) => match.matchScore >= threshold);
+  return matches.filter((m) => m.matchScore >= threshold);
 }
