@@ -1,192 +1,223 @@
 import schools from "@/data/schools.json";
 
 export type Gender = "mens" | "womens";
+export type Division = "D1" | "D2" | "D3";
+export type Region = "Northeast" | "Mid-Atlantic" | "South" | "Southeast" | "Southwest" | "Midwest" | "West" | "Other";
 
 export interface AthleteProfile {
   gpa: number;
   satScore?: number;
   actScore?: number;
-  clubLevel: "mls-next-academy" | "mls-next-club" | "lower-ecnl" | "ea-usys";
-  playingTime: "90mins" | "regular" | "sometimes" | "substitute" | "reserve";
+  clubLevel: "pro-academy" | "mls-next-ecnl" | "national" | "regional" | "local";
+  playingTime: "impact" | "starter" | "rotational" | "substitute" | "developmental";
+  preferredDivisions: Division[];
+  preferredRegions: Region[];
 }
 
 export interface School {
   id: number;
+  ncaaOrgId?: number;
   name: string;
   location: string;
+  state?: string;
+  region?: Region;
   avgGPA: number;
   avgSAT: number;
   avgACT: number;
-  division: string;
+  division: Division;
   conference: string;
   hasMensSoccer: boolean;
   hasWomensSoccer: boolean;
   mensUrl: string | null;
   womensUrl: string | null;
+  schoolUrl?: string | null;
+  athleticUrl?: string | null;
   acceptanceRate: number;
   tuition: string;
   internationalPercentage: number;
   tier: "elite" | "high" | "mid" | "accessible";
+  private?: boolean;
+  hbcu?: boolean;
+  source?: string;
   notes: string;
 }
 
 export interface MatchResult extends School {
   matchScore: number;
   reasons: string[];
-  athleticFit: string;
+  athleticFit: "Strong fit" | "Target" | "Reach" | "Safety" | "Long shot";
+  scoreBreakdown: {
+    athletic: number;
+    academic: number;
+    preference: number;
+    roster: number;
+  };
 }
 
-// Club level to recruitment competitiveness
-const clubLevelTier: Record<string, number> = {
-  "mls-next-academy": 100,
-  "mls-next-club": 85,
-  "lower-ecnl": 60,
-  "ea-usys": 35,
+const clubLevelScore: Record<AthleteProfile["clubLevel"], number> = {
+  "pro-academy": 98,
+  "mls-next-ecnl": 88,
+  national: 74,
+  regional: 58,
+  local: 42,
 };
 
-// Playing time scoring
-const playingTimeScore: Record<string, number> = {
-  "90mins": 100,
-  regular: 85,
-  sometimes: 65,
-  substitute: 40,
-  reserve: 20,
+const playingTimeScore: Record<AthleteProfile["playingTime"], number> = {
+  impact: 96,
+  starter: 86,
+  rotational: 70,
+  substitute: 52,
+  developmental: 34,
 };
 
-const IVY_NAMES = ["Harvard", "Yale", "Princeton", "University of Pennsylvania", "Dartmouth", "Brown", "Columbia", "Cornell"];
-const ELITE_ACC_NAMES = ["Stanford University", "University of North Carolina", "Duke University", "University of Virginia"];
-const TOP_D1_NAMES = [
-  "University of Michigan", "Ohio State University", "UCLA", "Northwestern University",
-  "Boston College", "Wake Forest University", "Notre Dame", "Georgetown University",
-  "Florida State University", "University of Maryland", "Indiana University",
-];
+const divisionDemand: Record<Division, Record<School["tier"], number>> = {
+  D1: { elite: 94, high: 86, mid: 76, accessible: 68 },
+  D2: { elite: 78, high: 72, mid: 62, accessible: 54 },
+  D3: { elite: 76, high: 68, mid: 56, accessible: 46 },
+};
+
+const academicWeightByTier: Record<School["tier"], number> = {
+  elite: 0.34,
+  high: 0.28,
+  mid: 0.22,
+  accessible: 0.18,
+};
+
+function clamp(value: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function testScore(profile: AthleteProfile) {
+  if (profile.satScore) return profile.satScore;
+  if (profile.actScore) return Math.round((profile.actScore / 36) * 1600);
+  return null;
+}
+
+function academicScore(profile: AthleteProfile, school: School) {
+  const gpaScore = clamp(78 + (profile.gpa - school.avgGPA) * 28);
+  const score = testScore(profile);
+  const testMatch = score ? clamp(78 + ((score - school.avgSAT) / 160) * 12) : 82;
+  return Math.round(gpaScore * 0.62 + testMatch * 0.38);
+}
+
+function athleticScore(profile: AthleteProfile, school: School) {
+  const playerLevel = clubLevelScore[profile.clubLevel] * 0.68 + playingTimeScore[profile.playingTime] * 0.32;
+  const demand = divisionDemand[school.division][school.tier];
+  const gap = playerLevel - demand;
+  const score = gap >= 0 ? 100 - gap * 0.45 : 100 + gap * 1.35;
+  return Math.round(clamp(score));
+}
+
+function preferenceScore(profile: AthleteProfile, school: School) {
+  const divisionFit = profile.preferredDivisions.length === 0 || profile.preferredDivisions.includes(school.division) ? 100 : 74;
+  const regionFit = profile.preferredRegions.length === 0 || (school.region && profile.preferredRegions.includes(school.region)) ? 100 : 82;
+  return Math.round(divisionFit * 0.6 + regionFit * 0.4);
+}
+
+function rosterScore(profile: AthleteProfile, school: School) {
+  const playerLevel = clubLevelScore[profile.clubLevel];
+  if (school.internationalPercentage >= 35 && playerLevel < 74) return 70;
+  if (school.internationalPercentage >= 25 && playerLevel < 58) return 76;
+  return 92;
+}
+
+function hardConstraint(profile: AthleteProfile, school: School) {
+  const score = testScore(profile);
+  const playerLevel = clubLevelScore[profile.clubLevel];
+
+  if (school.tier === "elite" && playerLevel < 74) {
+    return "Elite programs usually need a national-level club profile";
+  }
+
+  if (school.division === "D1" && school.tier !== "accessible" && playerLevel < 58) {
+    return "Most competitive D1 programs are a stretch from a local-only profile";
+  }
+
+  if (school.tier === "elite" && profile.gpa < 3.55) {
+    return "Academic profile is below the usual range for this school";
+  }
+
+  if (school.tier === "elite" && score && score < 1320) {
+    return "Test score is below the usual range for this school";
+  }
+
+  return null;
+}
+
+function fitLabel(score: number): MatchResult["athleticFit"] {
+  if (score >= 88) return "Strong fit";
+  if (score >= 78) return "Target";
+  if (score >= 67) return "Reach";
+  if (score >= 58) return "Long shot";
+  return "Safety";
+}
+
+function reasonsFor(profile: AthleteProfile, school: School, breakdown: MatchResult["scoreBreakdown"]) {
+  const reasons: string[] = [];
+
+  if (breakdown.athletic >= 86) reasons.push("Soccer level lines up well");
+  else if (breakdown.athletic >= 72) reasons.push("Athletic profile is in range");
+  else reasons.push("Athletic fit is a reach");
+
+  if (breakdown.academic >= 88) reasons.push("Strong academic match");
+  else if (breakdown.academic < 68) reasons.push("Academic reach");
+
+  if (profile.preferredDivisions.length < 3 && profile.preferredDivisions.includes(school.division)) reasons.push(`${school.division} preference`);
+  if (school.region && profile.preferredRegions.includes(school.region)) reasons.push(`${school.region} region`);
+  if (school.hasMensSoccer && school.hasWomensSoccer) reasons.push("Men's and women's programs");
+  if (school.hbcu) reasons.push("HBCU");
+
+  return reasons.slice(0, 4);
+}
 
 export function calculateMatches(profile: AthleteProfile, gender: Gender = "mens"): MatchResult[] {
-  const testScore = profile.satScore
-    ? profile.satScore
-    : profile.actScore
-    ? profile.actScore * 36
-    : 0;
-
-  // Only include schools that have a program for the selected gender
-  const eligibleSchools = (schools as School[]).filter((s) =>
-    gender === "mens" ? s.hasMensSoccer : s.hasWomensSoccer
+  const eligibleSchools = (schools as School[]).filter((school) =>
+    gender === "mens" ? school.hasMensSoccer : school.hasWomensSoccer
   );
 
-  const matches: MatchResult[] = eligibleSchools
+  return eligibleSchools
     .map((school) => {
-      let score = 0;
-      const reasons: string[] = [];
-      let athleticFit = "Match";
-
-      const isIvy = IVY_NAMES.some((n) => school.name.includes(n.split(" ")[0]) || school.name === n);
-      const isEliteACC = ELITE_ACC_NAMES.some((n) => school.name === n);
-      const isTopD1 = TOP_D1_NAMES.some((n) => school.name === n);
-      const isMidD1 = school.tier === "high" || school.tier === "mid";
-
-      // Hard constraint: club level vs school tier
-      if (profile.clubLevel === "ea-usys") {
-        if (isIvy || isEliteACC || isTopD1 || isMidD1) {
-          return {
-            ...school,
-            matchScore: 0,
-            reasons: ["Club level too low for this program"],
-            athleticFit: "Not Viable",
-          };
-        }
+      const constraint = hardConstraint(profile, school);
+      if (constraint) {
+        return {
+          ...school,
+          matchScore: 0,
+          reasons: [constraint],
+          athleticFit: "Long shot" as const,
+          scoreBreakdown: { athletic: 0, academic: 0, preference: 0, roster: 0 },
+        };
       }
 
-      if (profile.clubLevel === "lower-ecnl") {
-        if (isIvy || isEliteACC || isTopD1) {
-          return {
-            ...school,
-            matchScore: 0,
-            reasons: ["Need MLS Next Club or Academy level for this program"],
-            athleticFit: "Not Viable",
-          };
-        }
-      }
+      const breakdown = {
+        athletic: athleticScore(profile, school),
+        academic: academicScore(profile, school),
+        preference: preferenceScore(profile, school),
+        roster: rosterScore(profile, school),
+      };
 
-      // Ivy League playing time constraint (lower club levels)
-      if (isIvy && (profile.playingTime === "substitute" || profile.playingTime === "reserve")) {
-        if (profile.clubLevel === "lower-ecnl" || profile.clubLevel === "ea-usys") {
-          return {
-            ...school,
-            matchScore: 0,
-            reasons: ["Ivy League requires at least regular starter status at your club level"],
-            athleticFit: "Not Viable",
-          };
-        }
-      }
-
-      // Hard constraint: elite schools need SAT 1360+ and GPA 3.6+
-      if (isIvy || isEliteACC) {
-        if (testScore < 1360 || profile.gpa < 3.6) {
-          return {
-            ...school,
-            matchScore: 0,
-            reasons: ["Need SAT 1360+ and GPA 3.6+ for this program"],
-            athleticFit: "Not Viable",
-          };
-        }
-      }
-
-      // Academic fit (35%)
-      const gpaMatch = Math.min(100, (profile.gpa / school.avgGPA) * 100);
-      const satMatch = testScore ? Math.min(100, (testScore / school.avgSAT) * 100) : 100;
-      const academicScore = (gpaMatch + satMatch) / 2;
-      score += academicScore * 0.35;
-
-      if (gpaMatch >= 95) reasons.push("Excellent GPA match");
-      else if (gpaMatch >= 85) reasons.push("Strong GPA match");
-      else if (gpaMatch < 70) reasons.push("GPA below school average");
-
-      // Club level (55% — dominant factor)
-      const clubScore = clubLevelTier[profile.clubLevel] || 50;
-      score += clubScore * 0.55;
-
-      if (clubScore >= 85) reasons.push("Top club level — strong recruiting advantage");
-      else if (clubScore >= 60) reasons.push("Competitive club level");
-      else reasons.push("Lower club level");
-
-      // Playing time (10%)
-      const playingTimeValue = playingTimeScore[profile.playingTime] || 50;
-      score += playingTimeValue * 0.1;
-
-      if (playingTimeValue >= 85) reasons.push("Elite playing time");
-
-      // International roster consideration (5%)
-      let internationalBoost = 100;
-      if (
-        profile.clubLevel !== "mls-next-academy" &&
-        profile.clubLevel !== "mls-next-club" &&
-        school.internationalPercentage > 60
-      ) {
-        internationalBoost = 70;
-        reasons.push(`High international roster (${school.internationalPercentage}%)`);
-      }
-      score += internationalBoost * 0.05;
-
-      score = Math.round(Math.max(0, Math.min(100, score)));
-
-      if (score >= 85) athleticFit = "Excellent Fit";
-      else if (score >= 75) athleticFit = "Good Fit";
-      else if (score >= 65) athleticFit = "Possible Fit";
-      else if (score >= 50) athleticFit = "Reach";
+      const academicWeight = academicWeightByTier[school.tier];
+      const score = Math.round(clamp(
+        breakdown.athletic * 0.46 +
+          breakdown.academic * academicWeight +
+          breakdown.preference * 0.16 +
+          breakdown.roster * (0.38 - academicWeight)
+      ));
 
       return {
         ...school,
         matchScore: score,
-        reasons,
-        athleticFit,
+        reasons: reasonsFor(profile, school, breakdown),
+        athleticFit: fitLabel(score),
+        scoreBreakdown: breakdown,
       };
     })
-    .filter((match) => match.matchScore > 0)
-    .sort((a, b) => b.matchScore - a.matchScore);
-
-  return matches;
+    .filter((match) => match.matchScore >= 54)
+    .sort((a, b) => {
+      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+      return a.name.localeCompare(b.name);
+    });
 }
 
-export function filterByThreshold(matches: MatchResult[], threshold: number = 50): MatchResult[] {
+export function filterByThreshold(matches: MatchResult[], threshold = 54): MatchResult[] {
   return matches.filter((match) => match.matchScore >= threshold);
 }

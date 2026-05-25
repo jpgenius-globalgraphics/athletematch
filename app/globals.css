@@ -2,9 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #f7f8f5;
+  --surface: #ffffff;
+  --surface-muted: #eef2ec;
+  --text: #17201b;
+  --muted: #647067;
+  --line: #d9dfd8;
+  --green: #236b4b;
+  --blue: #245c83;
+  --gold: #b7791f;
+  --red: #b34537;
+}
+
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
@@ -13,50 +24,74 @@ html {
 }
 
 body {
-  background: #0a0a0a;
-  color: #ffffff;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
-/* Gradient backgrounds */
-.gradient-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+button,
+input,
+select {
+  font: inherit;
 }
 
-.gradient-secondary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-.gradient-accent {
-  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
-/* Glass morphism */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.field {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 0.72rem 0.82rem;
+  outline: none;
 }
 
-/* Smooth transitions */
-.transition-all {
-  transition: all 0.3s ease;
+.field:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(36, 92, 131, 0.14);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.86rem;
+  font-weight: 600;
 }
 
-::-webkit-scrollbar-track {
-  background: #1a1a1a;
+.chip-active {
+  border-color: var(--green);
+  background: #e7f1ea;
+  color: var(--green);
 }
 
-::-webkit-scrollbar-thumb {
-  background: #3b82f6;
-  border-radius: 4px;
+.button-primary {
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  background: var(--green);
+  color: #fff;
+  padding: 0.78rem 1rem;
+  font-weight: 700;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #2563eb;
+.button-secondary {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 0.72rem 0.95rem;
+  font-weight: 650;
 }

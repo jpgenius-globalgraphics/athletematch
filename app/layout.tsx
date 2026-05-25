@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AthleteMatch - Find Your Perfect College",
-  description: "AI-powered college recruiting platform for athletes. Find schools that match your academic and athletic profile.",
+  title: "AthleteMatch | College Soccer Fit",
+  description: "College soccer matching for players comparing NCAA programs by academics, playing level, division, region, and program availability.",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-black text-white">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

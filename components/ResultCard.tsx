@@ -1,8 +1,7 @@
 "use client";
 
-import { MatchResult } from "@/lib/matchingEngine";
-import { type Gender } from "@/lib/matchingEngine";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { MatchResult, type Gender } from "@/lib/matchingEngine";
+import { ChevronDown, ExternalLink, GraduationCap, MapPin, Percent, Trophy } from "lucide-react";
 import { useState } from "react";
 
 interface ResultCardProps {
@@ -10,167 +9,135 @@ interface ResultCardProps {
   gender: Gender;
 }
 
+function scoreTone(score: number) {
+  if (score >= 88) return "text-[var(--green)] bg-[#e7f1ea] border-[#b7d5c2]";
+  if (score >= 78) return "text-[var(--blue)] bg-[#e8f0f5] border-[#b8cddd]";
+  if (score >= 67) return "text-[var(--gold)] bg-[#fff4dc] border-[#ecd39e]";
+  return "text-[var(--red)] bg-[#f9e7e3] border-[#e3b9b0]";
+}
+
 export default function ResultCard({ school, gender }: ResultCardProps) {
   const [expanded, setExpanded] = useState(false);
-
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return "text-green-400";
-    if (score >= 75) return "text-blue-400";
-    if (score >= 65) return "text-yellow-400";
-    return "text-orange-400";
-  };
-
-  const getScoreBg = (score: number) => {
-    if (score >= 85) return "bg-green-500/20 border-green-500/30";
-    if (score >= 75) return "bg-blue-500/20 border-blue-500/30";
-    if (score >= 65) return "bg-yellow-500/20 border-yellow-500/30";
-    return "bg-orange-500/20 border-orange-500/30";
-  };
-
-  // Use the gender-specific URL if available, fall back to a Google search
-  const programUrl =
-    gender === "mens"
-      ? school.mensUrl ??
-        `https://www.google.com/search?q=${encodeURIComponent(school.name + " men's soccer")}`
-      : school.womensUrl ??
-        `https://www.google.com/search?q=${encodeURIComponent(school.name + " women's soccer")}`;
-
-  const divisionBadgeColor =
-    school.division === "D1"
-      ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
-      : school.division === "D2"
-      ? "bg-green-500/20 text-green-300 border-green-500/30"
-      : "bg-purple-500/20 text-purple-300 border-purple-500/30";
+  const programUrl = gender === "mens" ? school.mensUrl : school.womensUrl;
+  const programLabel = gender === "mens" ? "Men's program" : "Women's program";
 
   return (
-    <div className="glass rounded-xl overflow-hidden hover:bg-white/10 transition-all">
+    <article className="panel overflow-hidden">
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-8 py-6 flex items-start justify-between hover:bg-white/5 transition-colors"
+        onClick={() => setExpanded((value) => !value)}
+        className="grid w-full gap-5 p-5 text-left md:grid-cols-[1fr_auto] md:items-start"
+        aria-expanded={expanded}
       >
-        <div className="flex-1 text-left">
-          <div className="flex items-center gap-3 mb-2 flex-wrap">
-            <h3 className="text-2xl font-bold">{school.name}</h3>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${divisionBadgeColor}`}>
+        <div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h3 className="text-xl font-bold leading-tight">{school.name}</h3>
+            <span className="rounded-full border border-[var(--line)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-bold text-[var(--muted)]">
               {school.division}
             </span>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-gray-300">
+            <span className="rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">
+              {school.tier}
+            </span>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted)]">
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin className="h-4 w-4" />
+              {school.location}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Trophy className="h-4 w-4" />
               {school.conference}
             </span>
           </div>
-          <p className="text-gray-400 text-sm mb-3">{school.location}</p>
 
-          <div className="flex flex-wrap gap-2 mb-3">
-            {school.reasons.map((reason, i) => (
-              <span key={i} className="text-xs bg-white/10 px-3 py-1 rounded-full text-gray-300">
+          <div className="flex flex-wrap gap-2">
+            {school.reasons.map((reason) => (
+              <span key={reason} className="rounded-full bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--muted)]">
                 {reason}
               </span>
             ))}
           </div>
-
-          <div className="text-sm text-gray-400">
-            <span className="font-semibold text-blue-400">International: </span>
-            {school.internationalPercentage}% of roster
-          </div>
         </div>
 
-        <div className="flex flex-col items-end gap-4 ml-4 shrink-0">
-          <div
-            className={`flex flex-col items-center p-4 rounded-lg border ${getScoreBg(
-              school.matchScore
-            )}`}
-          >
-            <span className="text-xs font-semibold text-gray-400 mb-1">Match</span>
-            <span className={`text-3xl font-bold ${getScoreColor(school.matchScore)}`}>
-              {school.matchScore}%
-            </span>
-            <span className="text-xs text-gray-300 mt-1">{school.athleticFit}</span>
+        <div className="flex items-center justify-between gap-4 md:flex-col md:items-end">
+          <div className={`min-w-[96px] rounded-lg border px-4 py-3 text-center ${scoreTone(school.matchScore)}`}>
+            <div className="text-xs font-bold uppercase tracking-wide">Fit</div>
+            <div className="text-3xl font-black leading-none">{school.matchScore}</div>
+            <div className="mt-1 text-xs font-bold">{school.athleticFit}</div>
           </div>
-          <ChevronDown
-            className={`w-5 h-5 transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
+          <ChevronDown className={`h-5 w-5 text-[var(--muted)] transition-transform ${expanded ? "rotate-180" : ""}`} />
         </div>
       </button>
 
       {expanded && (
-        <div className="border-t border-white/10 px-8 py-6 space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
+        <div className="border-t border-[var(--line)] p-5">
+          <div className="grid gap-4 md:grid-cols-4">
+            <Metric icon={<Trophy className="h-4 w-4" />} label="Athletic" value={school.scoreBreakdown.athletic} />
+            <Metric icon={<GraduationCap className="h-4 w-4" />} label="Academic" value={school.scoreBreakdown.academic} />
+            <Metric icon={<MapPin className="h-4 w-4" />} label="Preference" value={school.scoreBreakdown.preference} />
+            <Metric icon={<Percent className="h-4 w-4" />} label="Roster" value={school.scoreBreakdown.roster} />
+          </div>
+
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
             <div>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Academic Standards</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-gray-400">Avg GPA:</span>{" "}
-                  <span className="font-semibold">{school.avgGPA}</span>
-                </p>
-                <p>
-                  <span className="text-gray-400">Avg SAT:</span>{" "}
-                  <span className="font-semibold">{school.avgSAT}</span>
-                </p>
-                <p>
-                  <span className="text-gray-400">Avg ACT:</span>{" "}
-                  <span className="font-semibold">{school.avgACT}</span>
-                </p>
-                <p>
-                  <span className="text-gray-400">Acceptance Rate:</span>{" "}
-                  <span className="font-semibold">{school.acceptanceRate}%</span>
-                </p>
-              </div>
+              <h4 className="mb-2 text-sm font-bold text-[var(--muted)]">Admissions Range</h4>
+              <dl className="grid grid-cols-2 gap-2 text-sm">
+                <Info label="Avg GPA" value={school.avgGPA} />
+                <Info label="Avg SAT" value={school.avgSAT} />
+                <Info label="Avg ACT" value={school.avgACT} />
+                <Info label="Acceptance" value={`${school.acceptanceRate}%`} />
+              </dl>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Program Details</h4>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-gray-400">Tuition:</span>{" "}
-                  <span className="font-semibold">{school.tuition}</span>
-                </p>
-                <p>
-                  <span className="text-gray-400">Division:</span>{" "}
-                  <span className="font-semibold">
-                    {school.division} — {school.conference}
-                  </span>
-                </p>
-                <p>
-                  <span className="text-gray-400">International:</span>{" "}
-                  <span className="font-semibold">{school.internationalPercentage}% of roster</span>
-                </p>
-                <p>
-                  <span className="text-gray-400">Program:</span>{" "}
-                  <span className="font-semibold">
-                    {gender === "mens" ? "Men's Soccer" : "Women's Soccer"}
-                  </span>
-                </p>
-              </div>
+              <h4 className="mb-2 text-sm font-bold text-[var(--muted)]">Program</h4>
+              <dl className="grid grid-cols-1 gap-2 text-sm">
+                <Info label="Roster" value={`${school.internationalPercentage}% estimated international`} />
+                <Info label="Cost" value={school.tuition} />
+                <Info label="Source" value={school.source || "School database"} />
+              </dl>
             </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-semibold text-gray-400 mb-2">Program Notes</h4>
-            <p className="text-sm text-gray-300">{school.notes}</p>
-          </div>
+          <p className="mt-5 text-sm leading-6 text-[var(--muted)]">{school.notes}</p>
 
-          <div className="flex gap-3 pt-2">
-            <a
-              href={programUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-blue-500 text-blue-400 hover:bg-blue-500/10 transition-all text-sm font-semibold"
-            >
-              <ExternalLink className="w-4 h-4" />
-              {gender === "mens" ? "Men's Soccer Page" : "Women's Soccer Page"}
-            </a>
-            <a
-              href={`https://www.google.com/search?q=${encodeURIComponent(school.name)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-all text-sm font-semibold"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Visit School
-            </a>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            {programUrl && (
+              <a href={programUrl} target="_blank" rel="noopener noreferrer" className="button-primary inline-flex items-center justify-center gap-2">
+                <ExternalLink className="h-4 w-4" />
+                {programLabel}
+              </a>
+            )}
+            {school.schoolUrl && (
+              <a href={school.schoolUrl} target="_blank" rel="noopener noreferrer" className="button-secondary inline-flex items-center justify-center gap-2">
+                <ExternalLink className="h-4 w-4" />
+                School site
+              </a>
+            )}
           </div>
         </div>
       )}
+    </article>
+  );
+}
+
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-[var(--surface-muted)] p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+        {icon}
+        {label}
+      </div>
+      <div className="text-2xl font-black">{value}</div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-[var(--line)] bg-white p-3">
+      <dt className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">{label}</dt>
+      <dd className="mt-1 font-semibold">{value}</dd>
     </div>
   );
 }
