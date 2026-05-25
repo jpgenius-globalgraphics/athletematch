@@ -46,6 +46,7 @@ export interface School {
   hbcu?: boolean;
   source?: string;
   notes: string;
+  enrollment?: number;
 }
 
 export interface MatchResult extends School {
@@ -120,17 +121,26 @@ function preferenceScore(profile: AthleteProfile, school: School) {
   return Math.round(divisionFit * 0.6 + regionFit * 0.4);
 }
 
-// schools.json has no enrollment / programs / aid-type fields. The helpers below
-// proxy those signals from division, tier, private/public, conference, and name
-// patterns. They affect ranking but are not authoritative — replace with real
-// per-school data when available.
+// Enrollment now comes from College Scorecard for ~911/1037 schools (see
+// scripts/backfill_schools.py). The remaining ~126 fall back to the heuristic
+// below. Programs and aid-type are still proxied from name/conference/tier
+// patterns — affects ranking but not authoritative.
 
-function estimatedEnrollmentBand(school: School): "small" | "medium" | "large" {
+function enrollmentBandFromHeuristic(school: School): "small" | "medium" | "large" {
   if (school.division === "D3" && school.private) return "small";
   if (school.private && (school.tier === "elite" || school.tier === "high")) return "small";
   if (school.private) return "medium";
   if (school.tier === "elite" || school.tier === "high") return "large";
   return "medium";
+}
+
+function estimatedEnrollmentBand(school: School): "small" | "medium" | "large" {
+  if (typeof school.enrollment === "number") {
+    if (school.enrollment < 5000) return "small";
+    if (school.enrollment < 15000) return "medium";
+    return "large";
+  }
+  return enrollmentBandFromHeuristic(school);
 }
 
 function enrollmentDelta(school: School, preference: EnrollmentPreference | undefined): number {
