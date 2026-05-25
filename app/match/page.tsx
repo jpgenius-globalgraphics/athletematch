@@ -9,8 +9,13 @@ import ResultCard from "@/components/ResultCard";
 import {
   calculateMatches,
   filterByThreshold,
+  MAX_RESULTS,
+  MIN_MATCH_SCORE,
+  type AreaOfStudy,
   type AthleteProfile,
   type Division,
+  type EnrollmentPreference,
+  type FinancialAidPriority,
   type Gender,
   type MatchResult,
   type Region,
@@ -18,6 +23,29 @@ import {
 
 const DIVISIONS: Division[] = ["D1", "D2", "D3"];
 const REGIONS: Region[] = ["Northeast", "Mid-Atlantic", "South", "Southwest", "Midwest", "West"];
+
+const ENROLLMENT_OPTIONS: Array<{ value: EnrollmentPreference; label: string }> = [
+  { value: "small", label: "Small (under 5k)" },
+  { value: "medium", label: "Medium (5k–15k)" },
+  { value: "large", label: "Large (15k+)" },
+  { value: "any", label: "No preference" },
+];
+
+const AREA_OPTIONS: Array<{ value: AreaOfStudy; label: string }> = [
+  { value: "stem", label: "STEM" },
+  { value: "business", label: "Business" },
+  { value: "liberal-arts", label: "Liberal Arts" },
+  { value: "pre-med", label: "Pre-med" },
+  { value: "arts", label: "Arts" },
+  { value: "undecided", label: "Undecided" },
+];
+
+const AID_OPTIONS: Array<{ value: FinancialAidPriority; label: string }> = [
+  { value: "athletic", label: "Athletic scholarship" },
+  { value: "need-based", label: "Need-based aid" },
+  { value: "academic-merit", label: "Academic merit" },
+  { value: "none", label: "Not a priority" },
+];
 
 const CLUB_OPTIONS: Array<{ value: AthleteProfile["clubLevel"]; label: string; detail: string }> = [
   { value: "pro-academy", label: "Pro academy", detail: "MLS academy, NWSL academy, or equivalent" },
@@ -37,7 +65,7 @@ const PLAYING_TIME: Array<{ value: AthleteProfile["playingTime"]; label: string 
 
 export default function MatchPage() {
   const [gender, setGender] = useState<Gender>("mens");
-  const [threshold, setThreshold] = useState(60);
+  const [threshold, setThreshold] = useState(MIN_MATCH_SCORE);
   const [results, setResults] = useState<MatchResult[] | null>(null);
   const [profile, setProfile] = useState<AthleteProfile>({
     gpa: 3.5,
@@ -46,9 +74,15 @@ export default function MatchPage() {
     playingTime: "starter",
     preferredDivisions: ["D1", "D2", "D3"],
     preferredRegions: [],
+    enrollmentPreference: "any",
+    areaOfStudy: "undecided",
+    financialAidPriority: "none",
   });
 
-  const shownResults = useMemo(() => (results ? filterByThreshold(results, threshold).slice(0, 180) : []), [results, threshold]);
+  const shownResults = useMemo(
+    () => (results ? filterByThreshold(results, threshold).slice(0, MAX_RESULTS) : []),
+    [results, threshold]
+  );
 
   const toggleDivision = (division: Division) => {
     const next = profile.preferredDivisions.includes(division)
@@ -82,7 +116,7 @@ export default function MatchPage() {
               </Link>
               <h1 className="text-3xl font-black tracking-tight md:text-4xl">College soccer matches</h1>
               <p className="mt-2 max-w-2xl text-[var(--muted)]">
-                Showing {shownResults.length} of {results.length} eligible {gender === "mens" ? "men's" : "women's"} programs from the NCAA directory.
+                Top {shownResults.length} {gender === "mens" ? "men's" : "women's"} programs (capped at {MAX_RESULTS}, minimum {MIN_MATCH_SCORE}% fit).
               </p>
             </div>
 
@@ -93,8 +127,8 @@ export default function MatchPage() {
               </label>
               <input
                 type="range"
-                min="54"
-                max="90"
+                min={MIN_MATCH_SCORE}
+                max="95"
                 value={threshold}
                 onChange={(event) => setThreshold(Number(event.target.value))}
                 className="w-full"
@@ -267,6 +301,54 @@ export default function MatchPage() {
                       className={`chip ${profile.preferredRegions.includes(region) ? "chip-active" : ""}`}
                     >
                       {region}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-[var(--muted)]">Enrollment size</h3>
+                <div className="flex flex-wrap gap-2">
+                  {ENROLLMENT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setProfile({ ...profile, enrollmentPreference: option.value })}
+                      className={`chip ${profile.enrollmentPreference === option.value ? "chip-active" : ""}`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-[var(--muted)]">Area of study</h3>
+                <div className="flex flex-wrap gap-2">
+                  {AREA_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setProfile({ ...profile, areaOfStudy: option.value })}
+                      className={`chip ${profile.areaOfStudy === option.value ? "chip-active" : ""}`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-bold text-[var(--muted)]">Financial aid priority</h3>
+                <div className="flex flex-wrap gap-2">
+                  {AID_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setProfile({ ...profile, financialAidPriority: option.value })}
+                      className={`chip ${profile.financialAidPriority === option.value ? "chip-active" : ""}`}
+                    >
+                      {option.label}
                     </button>
                   ))}
                 </div>

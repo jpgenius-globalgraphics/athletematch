@@ -3,6 +3,9 @@ import schools from "@/data/schools.json";
 export type Gender = "mens" | "womens";
 export type Division = "D1" | "D2" | "D3";
 export type Region = "Northeast" | "Mid-Atlantic" | "South" | "Southeast" | "Southwest" | "Midwest" | "West" | "Other";
+export type EnrollmentPreference = "small" | "medium" | "large" | "any";
+export type AreaOfStudy = "stem" | "business" | "liberal-arts" | "pre-med" | "arts" | "undecided";
+export type FinancialAidPriority = "athletic" | "need-based" | "academic-merit" | "none";
 
 export interface AthleteProfile {
   gpa: number;
@@ -12,6 +15,9 @@ export interface AthleteProfile {
   playingTime: "impact" | "starter" | "rotational" | "substitute" | "developmental";
   preferredDivisions: Division[];
   preferredRegions: Region[];
+  enrollmentPreference?: EnrollmentPreference;
+  areaOfStudy?: AreaOfStudy;
+  financialAidPriority?: FinancialAidPriority;
 }
 
 export interface School {
@@ -114,6 +120,85 @@ function preferenceScore(profile: AthleteProfile, school: School) {
   return Math.round(divisionFit * 0.6 + regionFit * 0.4);
 }
 
+// schools.json has no enrollment / programs / aid-type fields. The helpers below
+// proxy those signals from division, tier, private/public, conference, and name
+// patterns. They affect ranking but are not authoritative — replace with real
+// per-school data when available.
+
+function estimatedEnrollmentBand(school: School): "small" | "medium" | "large" {
+  if (school.division === "D3" && school.private) return "small";
+  if (school.private && (school.tier === "elite" || school.tier === "high")) return "small";
+  if (school.private) return "medium";
+  if (school.tier === "elite" || school.tier === "high") return "large";
+  return "medium";
+}
+
+function enrollmentDelta(school: School, preference: EnrollmentPreference | undefined): number {
+  if (!preference || preference === "any") return 0;
+  const band = estimatedEnrollmentBand(school);
+  if (band === preference) return 4;
+  if ((preference === "small" && band === "large") || (preference === "large" && band === "small")) return -6;
+  return -2;
+}
+
+function areaOfStudyDelta(school: School, area: AreaOfStudy | undefined): number {
+  if (!area || area === "undecided") return 0;
+  const name = school.name;
+  switch (area) {
+    case "stem":
+      if (/(Institute of Technology|Polytechnic|\bTech\b|Technological)/.test(name)) return 8;
+      if (school.tier === "elite" || school.tier === "high") return 3;
+      return 0;
+    case "business":
+      if (school.tier === "elite") return 3;
+      if (school.tier === "high") return 2;
+      return 1;
+    case "liberal-arts": {
+      const isCollegeNamed = /^[^,]*\bCollege\b/.test(school.name);
+      if (school.private && school.division === "D3" && isCollegeNamed) return 8;
+      if (school.private && (school.tier === "elite" || school.tier === "high")) return 4;
+      return 0;
+    }
+    case "pre-med":
+      if (school.tier === "elite") return 5;
+      if (school.tier === "high") return 2;
+      return 0;
+    case "arts":
+      if (/(Conservatory|School of (the )?Arts|Art Institute)/i.test(name)) return 8;
+      if (school.private && school.tier !== "accessible") return 2;
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+// Returns { delta } for soft adjustments, or { exclude } when NCAA rules make
+// the aid type unavailable. Athletic scholarships: D3 prohibits (bylaw 15.01.3),
+// Ivy League D1 also does not offer them by conference policy.
+function financialAidEffect(
+  school: School,
+  priority: FinancialAidPriority | undefined
+): { delta: number; exclude?: string; reason?: string } {
+  if (!priority || priority === "none") return { delta: 0 };
+  switch (priority) {
+    case "athletic":
+      if (school.division === "D3") return { delta: 0, exclude: "NCAA D3 schools cannot offer athletic scholarships" };
+      if (school.conference === "The Ivy League") return { delta: 0, exclude: "Ivy League programs do not offer athletic scholarships" };
+      if (school.division === "D1") return { delta: 4, reason: "D1 athletic aid available" };
+      return { delta: 2, reason: "D2 athletic aid available" };
+    case "need-based":
+      if (school.private && (school.tier === "elite" || school.tier === "high")) return { delta: 5, reason: "Strong need-based aid" };
+      if (school.private) return { delta: 2 };
+      return { delta: 0 };
+    case "academic-merit":
+      if (school.tier === "elite") return { delta: -3 };
+      if (school.private && (school.tier === "high" || school.tier === "mid")) return { delta: 5, reason: "Merit aid common at this school" };
+      if (school.tier === "high") return { delta: 3 };
+      if (school.tier === "mid") return { delta: 2 };
+      return { delta: 0 };
+  }
+}
+
 function rosterScore(profile: AthleteProfile, school: School) {
   const playerLevel = clubLevelScore[profile.clubLevel];
   if (school.internationalPercentage >= 35 && playerLevel < 74) return 70;
@@ -152,7 +237,12 @@ function fitLabel(score: number): MatchResult["athleticFit"] {
   return "Safety";
 }
 
-function reasonsFor(profile: AthleteProfile, school: School, breakdown: MatchResult["scoreBreakdown"]) {
+function reasonsFor(
+  profile: AthleteProfile,
+  school: School,
+  breakdown: MatchResult["scoreBreakdown"],
+  aidReason?: string
+) {
   const reasons: string[] = [];
 
   if (breakdown.athletic >= 86) reasons.push("Soccer level lines up well");
@@ -164,60 +254,87 @@ function reasonsFor(profile: AthleteProfile, school: School, breakdown: MatchRes
 
   if (profile.preferredDivisions.length < 3 && profile.preferredDivisions.includes(school.division)) reasons.push(`${school.division} preference`);
   if (school.region && profile.preferredRegions.includes(school.region)) reasons.push(`${school.region} region`);
+
+  if (profile.enrollmentPreference && profile.enrollmentPreference !== "any") {
+    if (estimatedEnrollmentBand(school) === profile.enrollmentPreference) {
+      reasons.push(`${profile.enrollmentPreference[0].toUpperCase()}${profile.enrollmentPreference.slice(1)} campus`);
+    }
+  }
+  if (profile.areaOfStudy && profile.areaOfStudy !== "undecided" && areaOfStudyDelta(school, profile.areaOfStudy) >= 5) {
+    reasons.push("Aligned with your major");
+  }
+  if (aidReason) reasons.push(aidReason);
+
   if (school.hasMensSoccer && school.hasWomensSoccer) reasons.push("Men's and women's programs");
   if (school.hbcu) reasons.push("HBCU");
 
   return reasons.slice(0, 4);
 }
 
+export const MIN_MATCH_SCORE = 60;
+export const MAX_RESULTS = 15;
+
+type RankedMatch = MatchResult & { _precise: number };
+
 export function calculateMatches(profile: AthleteProfile, gender: Gender = "mens"): MatchResult[] {
   const eligibleSchools = (schools as School[]).filter((school) =>
     gender === "mens" ? school.hasMensSoccer : school.hasWomensSoccer
   );
 
-  return eligibleSchools
-    .map((school) => {
-      const constraint = hardConstraint(profile, school);
-      if (constraint) {
-        return {
-          ...school,
-          matchScore: 0,
-          reasons: [constraint],
-          athleticFit: "Long shot" as const,
-          scoreBreakdown: { athletic: 0, academic: 0, preference: 0, roster: 0 },
-        };
-      }
+  const ranked: RankedMatch[] = [];
 
-      const breakdown = {
-        athletic: athleticScore(profile, school),
-        academic: academicScore(profile, school),
-        preference: preferenceScore(profile, school),
-        roster: rosterScore(profile, school),
-      };
+  for (const school of eligibleSchools) {
+    const constraint = hardConstraint(profile, school);
+    if (constraint) continue;
 
-      const academicWeight = academicWeightByTier[school.tier];
-      const score = Math.round(clamp(
-        breakdown.athletic * 0.46 +
-          breakdown.academic * academicWeight +
-          breakdown.preference * 0.16 +
-          breakdown.roster * (0.38 - academicWeight)
-      ));
+    const aid = financialAidEffect(school, profile.financialAidPriority);
+    if (aid.exclude) continue;
 
-      return {
-        ...school,
-        matchScore: score,
-        reasons: reasonsFor(profile, school, breakdown),
-        athleticFit: fitLabel(score),
-        scoreBreakdown: breakdown,
-      };
-    })
-    .filter((match) => match.matchScore >= 54)
-    .sort((a, b) => {
-      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
-      return a.name.localeCompare(b.name);
+    const breakdown = {
+      athletic: athleticScore(profile, school),
+      academic: academicScore(profile, school),
+      preference: preferenceScore(profile, school),
+      roster: rosterScore(profile, school),
+    };
+
+    const academicWeight = academicWeightByTier[school.tier];
+    const baseScore =
+      breakdown.athletic * 0.46 +
+      breakdown.academic * academicWeight +
+      breakdown.preference * 0.16 +
+      breakdown.roster * (0.38 - academicWeight);
+
+    // Per-school adjustments — these break ties left by the discrete (division, tier)
+    // bins above by injecting real per-school signal.
+    const precise = clamp(
+      baseScore +
+        enrollmentDelta(school, profile.enrollmentPreference) +
+        areaOfStudyDelta(school, profile.areaOfStudy) +
+        aid.delta
+    );
+    const matchScore = Math.round(precise);
+    if (matchScore < MIN_MATCH_SCORE) continue;
+
+    ranked.push({
+      ...school,
+      matchScore,
+      reasons: reasonsFor(profile, school, breakdown, aid.reason),
+      athleticFit: fitLabel(matchScore),
+      scoreBreakdown: breakdown,
+      _precise: precise,
     });
+  }
+
+  // Sort on the unrounded float so schools that round to the same integer still
+  // rank by their true score gap; localeCompare is a final deterministic fallback.
+  ranked.sort((a, b) => {
+    if (b._precise !== a._precise) return b._precise - a._precise;
+    return a.name.localeCompare(b.name);
+  });
+
+  return ranked.slice(0, MAX_RESULTS).map(({ _precise, ...rest }) => rest);
 }
 
-export function filterByThreshold(matches: MatchResult[], threshold = 54): MatchResult[] {
+export function filterByThreshold(matches: MatchResult[], threshold = MIN_MATCH_SCORE): MatchResult[] {
   return matches.filter((match) => match.matchScore >= threshold);
 }
