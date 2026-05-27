@@ -1,7 +1,8 @@
 export const runtime = "edge";
 
 import Link from "next/link";
-import { ArrowRight, Database, GraduationCap, Map, ShieldCheck, Trophy } from "lucide-react";
+import { ArrowRight, Clock, Database, FileText, GraduationCap, Map, ShieldCheck, Trophy, UserCheck } from "lucide-react";
+import { Show, UserButton } from "@clerk/nextjs";
 import schools from "@/data/schools.json";
 
 export default function Home() {
@@ -16,10 +17,20 @@ export default function Home() {
             <Trophy className="h-6 w-6 text-[var(--green)]" />
             AthleteMatch
           </div>
-          <Link href="/match" className="button-primary inline-flex items-center gap-2">
-            Start
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex items-center gap-3">
+            <Show when="signed-out">
+              <Link href="/sign-in" className="text-sm font-bold text-[var(--blue)]">
+                Sign in
+              </Link>
+            </Show>
+            <Link href="/match" className="button-primary inline-flex items-center gap-2">
+              Start
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
+          </div>
         </nav>
 
         <section className="grid min-h-[72vh] gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
@@ -56,8 +67,56 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section className="mt-20 mb-12">
+          <div className="mb-6">
+            <p className="mb-3 text-sm font-black uppercase tracking-wide text-[var(--green)]">
+              Personalized recruiting report
+            </p>
+            <h2 className="max-w-3xl text-3xl font-black tracking-tight md:text-4xl">
+              Want a full breakdown?
+            </h2>
+            <p className="mt-4 max-w-2xl text-lg leading-7 text-[var(--muted)]">
+              Our team reviews your profile, film, and academic record and delivers a personalized
+              recruiting report within 48 hours. One-time $10.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Item
+              icon={<UserCheck className="h-5 w-5 text-[var(--green)]" />}
+              title="Real human review"
+              body="A reviewer reads your film and statement before writing."
+            />
+            <Item
+              icon={<FileText className="h-5 w-5 text-[var(--green)]" />}
+              title="PDF delivered to you"
+              body="Full report with school list, fit notes, and next-step suggestions."
+            />
+            <Item
+              icon={<Clock className="h-5 w-5 text-[var(--green)]" />}
+              title="Within 48 hours"
+              body="Submit today, get your report back within two business days."
+            />
+          </div>
+          <div className="mt-6">
+            <Link href="/report" className="button-primary inline-flex items-center gap-2">
+              Get Your Full Recruiting Report
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
+  );
+}
+
+function Item({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="panel p-5">
+      <div className="mb-3">{icon}</div>
+      <div className="font-bold">{title}</div>
+      <p className="mt-1 text-sm text-[var(--muted)]">{body}</p>
+    </div>
   );
 }
 

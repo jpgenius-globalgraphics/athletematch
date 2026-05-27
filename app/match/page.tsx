@@ -4,7 +4,8 @@ export const runtime = "edge";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowLeft, Filter, GraduationCap, Search, SlidersHorizontal, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Filter, GraduationCap, Search, SlidersHorizontal, Trophy } from "lucide-react";
+import { UserButton, useUser } from "@clerk/nextjs";
 import ResultCard from "@/components/ResultCard";
 import {
   calculateMatches,
@@ -64,6 +65,7 @@ const PLAYING_TIME: Array<{ value: AthleteProfile["playingTime"]; label: string 
 ];
 
 export default function MatchPage() {
+  const { isSignedIn } = useUser();
   const [gender, setGender] = useState<Gender>("mens");
   const [threshold, setThreshold] = useState(MIN_MATCH_SCORE);
   const [results, setResults] = useState<MatchResult[] | null>(null);
@@ -120,19 +122,22 @@ export default function MatchPage() {
               </p>
             </div>
 
-            <div className="panel flex flex-col gap-2 p-4 sm:min-w-[280px]">
-              <label className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
-                <SlidersHorizontal className="h-4 w-4" />
-                Minimum fit score: {threshold}
-              </label>
-              <input
-                type="range"
-                min={MIN_MATCH_SCORE}
-                max="95"
-                value={threshold}
-                onChange={(event) => setThreshold(Number(event.target.value))}
-                className="w-full"
-              />
+            <div className="flex items-start gap-3">
+              <div className="panel flex flex-col gap-2 p-4 sm:min-w-[280px]">
+                <label className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Minimum fit score: {threshold}
+                </label>
+                <input
+                  type="range"
+                  min={MIN_MATCH_SCORE}
+                  max="95"
+                  value={threshold}
+                  onChange={(event) => setThreshold(Number(event.target.value))}
+                  className="w-full"
+                />
+              </div>
+              {isSignedIn && <UserButton />}
             </div>
           </div>
 
@@ -148,6 +153,23 @@ export default function MatchPage() {
               <p className="mt-2 text-sm text-[var(--muted)]">Lower the minimum fit score or broaden the division and region filters.</p>
             </div>
           )}
+
+          <div className="panel mt-8 flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <FileText className="mt-1 h-5 w-5 text-[var(--green)]" />
+              <div>
+                <div className="font-bold">Want a human review of your profile?</div>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Our team writes a personalized recruiting report based on your film and academics.
+                  Delivered within 48 hours. One-time $10.
+                </p>
+              </div>
+            </div>
+            <Link href="/report" className="button-primary inline-flex items-center gap-2 whitespace-nowrap">
+              Get Your Full Recruiting Report
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -156,10 +178,21 @@ export default function MatchPage() {
   return (
     <main className="min-h-screen px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/" className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[var(--blue)]">
-          <ArrowLeft className="h-4 w-4" />
-          AthleteMatch
-        </Link>
+        <div className="mb-6 flex items-center justify-between">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-[var(--blue)]">
+            <ArrowLeft className="h-4 w-4" />
+            AthleteMatch
+          </Link>
+          <div className="flex items-center gap-3">
+            {isSignedIn ? (
+              <UserButton />
+            ) : (
+              <Link href="/sign-in" className="text-sm font-bold text-[var(--blue)]">
+                Sign in
+              </Link>
+            )}
+          </div>
+        </div>
 
         <div className="mb-8 grid gap-5 md:grid-cols-[1fr_360px] md:items-end">
           <div>
