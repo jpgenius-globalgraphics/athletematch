@@ -1,7 +1,7 @@
 export const runtime = "edge";
 
 import Link from "next/link";
-import { ArrowRight, Clock, FileText, GraduationCap, Database, Map, ShieldCheck, Trophy, UserCheck } from "lucide-react";
+import { ArrowRight, Clock, Database, FileText, GraduationCap, LogIn, Map, ShieldCheck, Trophy, UserCheck } from "lucide-react";
 import { Show, UserButton } from "@clerk/nextjs";
 import schools from "@/data/schools.json";
 
@@ -12,22 +12,33 @@ export default function Home() {
   return (
     <main className="min-h-screen px-5 py-8 md:px-8">
       <div className="mx-auto max-w-7xl">
-        <nav className="mb-12 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-black">
+        <nav className="mb-12 flex flex-nowrap items-center justify-between gap-3">
+          <div className="flex shrink-0 items-center gap-2 font-black">
             <Trophy className="h-6 w-6 text-[var(--green)]" />
             PitchPath
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <Show when="signed-out">
-              <Link href="/sign-in" className="text-sm font-bold text-[var(--blue)]">
-                Sign in
+              <Link
+                href="/sign-in"
+                aria-label="Sign in"
+                className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-[var(--blue)]"
+              >
+                <LogIn className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign in</span>
               </Link>
             </Show>
-            <Link href="/about" className="text-sm font-bold text-[var(--muted)]">
+            <Link
+              href="/about"
+              className="whitespace-nowrap text-sm font-bold text-[var(--muted)]"
+            >
               About
             </Link>
-            <Link href="/report" className="button-primary inline-flex items-center gap-2">
-              Get a Report
+            <Link
+              href="/report"
+              className="button-primary inline-flex items-center gap-2 whitespace-nowrap"
+            >
+              <span className="hidden sm:inline">Get a </span>Report
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Show when="signed-in">
