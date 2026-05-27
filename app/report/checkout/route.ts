@@ -37,7 +37,7 @@ export async function POST() {
             product_data: {
               name: "PitchPath personalized recruiting report",
               description:
-                "Human-reviewed PDF with personalized college targets and fit notes, delivered within 48 hours.",
+                "Human-reviewed PDF with personalized college targets and fit notes, delivered within 48 hours. You will fill out your recruiting profile on the next page after payment.",
             },
           },
         },

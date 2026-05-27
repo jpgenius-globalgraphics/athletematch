@@ -87,11 +87,11 @@ export default function AboutPage() {
               reviewed by someone who has been through the process.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/match" className="button-primary inline-flex items-center gap-2">
-                Build my list
-              </Link>
-              <Link href="/report" className="button-secondary inline-flex items-center gap-2">
+              <Link href="/report" className="button-primary inline-flex items-center gap-2">
                 Get a report
+              </Link>
+              <Link href="/match" className="button-secondary inline-flex items-center gap-2">
+                Build my list
               </Link>
             </div>
           </div>

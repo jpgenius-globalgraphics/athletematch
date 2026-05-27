@@ -1,7 +1,7 @@
 export const runtime = "edge";
 
 import Link from "next/link";
-import { ArrowRight, Clock, Database, FileText, GraduationCap, Map, ShieldCheck, Trophy, UserCheck } from "lucide-react";
+import { ArrowRight, Clock, FileText, GraduationCap, Database, Map, ShieldCheck, Trophy, UserCheck } from "lucide-react";
 import { Show, UserButton } from "@clerk/nextjs";
 import schools from "@/data/schools.json";
 
@@ -26,8 +26,8 @@ export default function Home() {
             <Link href="/about" className="text-sm font-bold text-[var(--muted)]">
               About
             </Link>
-            <Link href="/match" className="button-primary inline-flex items-center gap-2">
-              Start
+            <Link href="/report" className="button-primary inline-flex items-center gap-2">
+              Get a Report
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Show when="signed-in">
@@ -48,13 +48,13 @@ export default function Home() {
               Compare schools by soccer level, academic range, division, region, and gender-specific program availability.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/match" className="button-primary inline-flex items-center justify-center gap-2">
-                Build my list
+              <Link href="/report" className="button-primary inline-flex items-center justify-center gap-2">
+                Get a custom report
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <a href="#database" className="button-secondary inline-flex items-center justify-center gap-2">
-                View database
-                <Database className="h-4 w-4" />
+              <a href="#report" className="button-secondary inline-flex items-center justify-center gap-2">
+                Build my list
+                <ArrowRight className="h-4 w-4" />
               </a>
             </div>
           </div>
@@ -71,7 +71,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="mt-20 mb-12">
+        <section id="report" className="mt-20 mb-12">
           <div className="mb-6">
             <p className="mb-3 text-sm font-black uppercase tracking-wide text-[var(--green)]">
               Personalized recruiting report
