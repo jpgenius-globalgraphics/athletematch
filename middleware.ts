@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 const isProtected = createRouteMatcher([
   "/report/submit(.*)",
@@ -11,6 +12,11 @@ export default clerkMiddleware(async (auth, req) => {
   if (isProtected(req)) {
     await auth.protect();
   }
+  const res = NextResponse.next();
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return res;
 });
 
 export const config = {

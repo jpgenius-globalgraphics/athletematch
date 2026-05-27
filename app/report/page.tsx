@@ -5,8 +5,21 @@ import { auth } from "@clerk/nextjs/server";
 import { Show, UserButton } from "@clerk/nextjs";
 import { ArrowLeft, ArrowRight, Clock, FileText, Trophy, UserCheck } from "lucide-react";
 
-export default async function ReportPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  "already-submitted":
+    "That payment has already been used to submit a report. If you have not received your PDF yet, please email us — do not pay again.",
+  "session-lookup-failed":
+    "We could not verify your payment. Please try again, or contact us if the charge already went through.",
+};
+
+export default async function ReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { userId } = await auth();
+  const { error } = await searchParams;
+  const errorMessage = error ? ERROR_MESSAGES[error] : undefined;
 
   return (
     <main className="min-h-screen px-5 py-8 md:px-8">
@@ -29,6 +42,12 @@ export default async function ReportPage() {
             </Show>
           </div>
         </nav>
+
+        {errorMessage && (
+          <div className="panel mb-8 border-[var(--red)] bg-[#f9e7e3] p-4 text-sm font-bold text-[var(--red)]">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="mb-10">
           <p className="mb-3 text-sm font-black uppercase tracking-wide text-[var(--green)]">

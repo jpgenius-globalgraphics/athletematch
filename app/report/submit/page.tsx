@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
+import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import { isSessionUsed } from "@/lib/sessionGuard";
 import ReportForm from "@/components/ReportForm";
 
 export default async function SubmitPage({
@@ -19,8 +21,28 @@ export default async function SubmitPage({
   const { session_id } = await searchParams;
   if (!session_id) redirect("/report");
 
+  if (isSessionUsed(session_id)) {
+    redirect("/report?error=already-submitted");
+  }
+
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.retrieve(session_id);
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(session_id);
+  } catch (err) {
+    if (err instanceof Stripe.errors.StripeError) {
+      console.error("[report/submit] Stripe retrieve failed", {
+        type: err.type,
+        code: err.code,
+        statusCode: err.statusCode,
+        message: err.message,
+        requestId: err.requestId,
+      });
+    } else {
+      console.error("[report/submit] Unexpected error retrieving session", err);
+    }
+    redirect("/report?error=session-lookup-failed");
+  }
   if (session.payment_status !== "paid" || session.metadata?.userId !== userId) {
     redirect("/report");
   }
