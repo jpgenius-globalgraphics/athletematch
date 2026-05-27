@@ -23,6 +23,9 @@ export default function Home() {
                 Sign in
               </Link>
             </Show>
+            <Link href="/about" className="text-sm font-bold text-[var(--muted)]">
+              About
+            </Link>
             <Link href="/match" className="button-primary inline-flex items-center gap-2">
               Start
               <ArrowRight className="h-4 w-4" />
