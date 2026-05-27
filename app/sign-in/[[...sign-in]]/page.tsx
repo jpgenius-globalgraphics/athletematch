@@ -11,7 +11,7 @@ export default function SignInPage() {
         <nav className="mb-12 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-black">
             <Trophy className="h-6 w-6 text-[var(--green)]" />
-            AthleteMatch
+            PitchPath
           </Link>
           <Link
             href="/"

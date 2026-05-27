@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AthleteMatch | College Soccer Fit",
+  title: "PitchPath | College Soccer Fit",
   description:
     "College soccer matching for players comparing NCAA programs by academics, playing level, division, region, and program availability.",
 };

@@ -33,7 +33,7 @@ export async function sendSubmissionEmail(data: ReportSubmission): Promise<void>
 
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#17201b;max-width:640px;margin:0 auto">
-  <h2 style="margin:0 0 16px">New AthleteMatch report request</h2>
+  <h2 style="margin:0 0 16px">New PitchPath report request</h2>
   <p style="color:#647067;margin:0 0 24px">Reply to <strong>${data.userEmail}</strong> with the personalized PDF.</p>
   <table style="border-collapse:collapse;width:100%;border:1px solid #d9dfd8;border-radius:6px">
     ${row("Reply-to email", data.userEmail)}

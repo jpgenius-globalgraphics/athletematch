@@ -32,7 +32,7 @@ export async function POST() {
           currency: "usd",
           unit_amount: REPORT_PRICE_USD_CENTS,
           product_data: {
-            name: "AthleteMatch personalized recruiting report",
+            name: "PitchPath personalized recruiting report",
             description:
               "Human-reviewed PDF with personalized college targets and fit notes, delivered within 48 hours.",
           },

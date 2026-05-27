@@ -15,7 +15,7 @@ export default function Home() {
         <nav className="mb-12 flex items-center justify-between">
           <div className="flex items-center gap-2 font-black">
             <Trophy className="h-6 w-6 text-[var(--green)]" />
-            AthleteMatch
+            PitchPath
           </div>
           <div className="flex items-center gap-3">
             <Show when="signed-out">
