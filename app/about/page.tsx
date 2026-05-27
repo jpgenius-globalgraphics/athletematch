@@ -67,13 +67,9 @@ export default function AboutPage() {
               Most recruiting tools give you a list of schools and leave you to figure out
               the rest. PitchPath is different. The matching tool narrows down 1,037 NCAA
               programs to the ones that actually fit your academic profile, athletic level,
-              and personal priorities. And when you want a real human perspective, I personally
-              review your film, your profile, and your goals and deliver a report that tells
+              and personal priorities. And when you want a real human perspective, our team
+              reviews your film, your profile, and your goals and delivers a report that tells
               you exactly where you stand and which programs to target.
-            </p>
-            <p>
-              This is not a faceless platform. Every report that goes out has my name on it.
-              I take that seriously.
             </p>
           </div>
         </section>
