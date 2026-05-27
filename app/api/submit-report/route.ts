@@ -3,7 +3,7 @@ export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, REPORT_PRICE_USD_CENTS } from "@/lib/stripe";
 import { sendSubmissionEmail, type ReportSubmission } from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { isSessionUsed, markSessionUsed } from "@/lib/sessionGuard";
@@ -131,7 +131,18 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Something went wrong", { status: 500 });
   }
 
-  if (session.payment_status !== "paid" || session.metadata?.userId !== userId) {
+  if (
+    session.payment_status !== "paid" ||
+    session.metadata?.userId !== userId ||
+    session.amount_total !== REPORT_PRICE_USD_CENTS
+  ) {
+    console.error("[submit-report] Session failed verification", {
+      sessionId: session.id,
+      paymentStatus: session.payment_status,
+      metadataUserIdMatches: session.metadata?.userId === userId,
+      amountTotal: session.amount_total,
+      expectedAmount: REPORT_PRICE_USD_CENTS,
+    });
     return new NextResponse("Payment not verified", { status: 402 });
   }
 

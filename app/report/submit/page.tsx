@@ -6,7 +6,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, REPORT_PRICE_USD_CENTS } from "@/lib/stripe";
 import { isSessionUsed } from "@/lib/sessionGuard";
 import ReportForm from "@/components/ReportForm";
 
@@ -43,7 +43,18 @@ export default async function SubmitPage({
     }
     redirect("/report?error=session-lookup-failed");
   }
-  if (session.payment_status !== "paid" || session.metadata?.userId !== userId) {
+  if (
+    session.payment_status !== "paid" ||
+    session.metadata?.userId !== userId ||
+    session.amount_total !== REPORT_PRICE_USD_CENTS
+  ) {
+    console.error("[report/submit] Session failed verification", {
+      sessionId: session.id,
+      paymentStatus: session.payment_status,
+      metadataUserIdMatches: session.metadata?.userId === userId,
+      amountTotal: session.amount_total,
+      expectedAmount: REPORT_PRICE_USD_CENTS,
+    });
     redirect("/report");
   }
 

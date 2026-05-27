@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
@@ -26,6 +26,10 @@ export default function ReportForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous lock — React state updates are async, so a rapid double-click
+  // could fire handleSubmit twice before `submitting` propagates to the
+  // disabled prop. The ref short-circuits the second call.
+  const submittingRef = useRef(false);
 
   const [gpa, setGpa] = useState("");
   const [courseRigor, setCourseRigor] = useState(COURSE_RIGOR[0]);
@@ -45,10 +49,12 @@ export default function ReportForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submittingRef.current) return;
     if (overLimit) {
       setError(`Personal statement is ${wordCount} words; limit is ${STATEMENT_WORD_LIMIT}.`);
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -82,6 +88,7 @@ export default function ReportForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed");
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

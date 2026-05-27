@@ -16,9 +16,18 @@ export interface ReportSubmission {
   personalStatement: string;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function row(label: string, value: string | undefined): string {
   if (!value) return "";
-  const safe = String(value).replace(/[<>]/g, (c) => (c === "<" ? "&lt;" : "&gt;"));
+  const safe = escapeHtml(String(value));
   return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:600;color:#647067;vertical-align:top;width:160px">${label}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;white-space:pre-wrap">${safe}</td></tr>`;
 }
 
@@ -31,10 +40,11 @@ export async function sendSubmissionEmail(data: ReportSubmission): Promise<void>
 
   const resend = new Resend(apiKey);
 
+  const safeUserEmail = escapeHtml(data.userEmail);
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#17201b;max-width:640px;margin:0 auto">
   <h2 style="margin:0 0 16px">New PitchPath report request</h2>
-  <p style="color:#647067;margin:0 0 24px">Reply to <strong>${data.userEmail}</strong> with the personalized PDF.</p>
+  <p style="color:#647067;margin:0 0 24px">Reply to <strong>${safeUserEmail}</strong> with the personalized PDF.</p>
   <table style="border-collapse:collapse;width:100%;border:1px solid #d9dfd8;border-radius:6px">
     ${row("Reply-to email", data.userEmail)}
     ${row("GPA", data.gpa)}
