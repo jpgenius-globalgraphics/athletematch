@@ -1,3 +1,5 @@
+export const runtime = "edge";
+
 import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
 import { ArrowLeft, Trophy } from "lucide-react";
