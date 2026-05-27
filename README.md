@@ -1,4 +1,4 @@
-# AthleteMatch
+# PitchPath
 
 College soccer matching for players comparing NCAA programs by academic range, soccer level, division, region, and gender-specific program availability.
 
