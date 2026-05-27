@@ -52,10 +52,10 @@ export default function Home() {
                 Get a custom report
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <a href="#report" className="button-secondary inline-flex items-center justify-center gap-2">
+              <Link href="/match" className="button-secondary inline-flex items-center justify-center gap-2">
                 Build my list
                 <ArrowRight className="h-4 w-4" />
-              </a>
+              </Link>
             </div>
           </div>
 
