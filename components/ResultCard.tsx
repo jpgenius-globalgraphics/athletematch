@@ -16,6 +16,31 @@ function scoreTone(score: number) {
   return "text-[var(--red)] bg-[#f9e7e3] border-[#e3b9b0]";
 }
 
+// Bar fill color: same banding as scoreTone but as a single solid CSS var.
+function barFill(score: number) {
+  if (score >= 78) return "var(--green)";
+  if (score >= 67) return "var(--blue)";
+  if (score >= 55) return "var(--gold)";
+  return "var(--red)";
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex min-w-[110px] flex-1 flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-2 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">
+        <span>{label}</span>
+        <span className="tabular-nums text-[var(--text)]">{value}%</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${Math.max(0, Math.min(100, value))}%`, background: barFill(value) }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function ResultCard({ school, gender }: ResultCardProps) {
   const [expanded, setExpanded] = useState(false);
   const programUrl = gender === "mens" ? school.mensUrl : school.womensUrl;
@@ -37,6 +62,13 @@ export default function ResultCard({ school, gender }: ResultCardProps) {
             <span className="rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--muted)]">
               {school.tier}
             </span>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-4">
+            <ScoreBar label="Athletic" value={school.scoreBreakdown.athleticFit} />
+            <ScoreBar label="Academic" value={school.scoreBreakdown.academicFit} />
+            <ScoreBar label="Campus" value={school.scoreBreakdown.campusFit} />
+            <ScoreBar label="Financial" value={school.scoreBreakdown.financialFit} />
           </div>
 
           <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted)]">

@@ -50,6 +50,11 @@ export interface School {
   tuition: string;
   internationalPercentage: number;
   tier: "elite" | "high" | "mid" | "accessible";
+  // How much an athletic recruit's profile can sit below the school's
+  // published academic averages and still be admissible. Driven mostly by
+  // conference (Ivy/ACC/Big Ten → high; mid-major D1 → medium; D2/D3 and
+  // STEM-elite exceptions like MIT/Caltech → low).
+  athleticAdmissionsFlexibility: "high" | "medium" | "low";
   private?: boolean;
   hbcu?: boolean;
   source?: string;
@@ -71,8 +76,8 @@ export interface MatchResult extends School {
   scoreBreakdown: ScoreBreakdown;
 }
 
-export const MIN_MATCH_SCORE = 60;
-export const MAX_RESULTS = 15;
+export const MIN_MATCH_SCORE = 62;
+export const MAX_RESULTS = 20;
 
 // =====================================================================
 // Architecture
@@ -108,11 +113,41 @@ const playingTimeScore: Record<AthleteProfile["playingTime"], number> = {
   developmental: 34,
 };
 
+// Lowered for D1 elite/high/mid: ECNL impact players are the realistic core
+// recruiting pool for elite D1, not just pro-academy kids. Old D1 elite=94
+// meant an 88-rated ECNL impact player was penalized into the 70s; the new
+// 86 lets that profile peak in the 88-92 range, which matches how Ivy/ACC
+// coaches actually evaluate.
 const divisionDemand: Record<Division, Record<School["tier"], number>> = {
-  D1: { elite: 94, high: 86, mid: 76, accessible: 68 },
+  D1: { elite: 86, high: 80, mid: 70, accessible: 68 },
   D2: { elite: 78, high: 72, mid: 62, accessible: 54 },
   D3: { elite: 76, high: 68, mid: 56, accessible: 46 },
 };
+
+// SAT floors per flexibility band for the elite-tier hard filter. Replaces
+// the old single 1320 floor that locked legitimate Ivy recruits out.
+const ELITE_SAT_FLOOR: Record<School["athleticAdmissionsFlexibility"], number> = {
+  high: 1150,
+  medium: 1200,
+  low: 1320,
+};
+
+// Conference families used for the explanation layer. Names match the
+// literal `conference` strings in schools.json.
+const POWER_CONFERENCES = new Set([
+  "Atlantic Coast Conference",
+  "Big Ten Conference",
+  "Southeastern Conference",
+  "Big 12 Conference",
+]);
+
+const STRONG_ACADEMIC_CONFERENCES = new Set([
+  "Patriot League",
+  "West Coast Conference",
+  "Atlantic 10 Conference",
+]);
+
+const IVY_CONFERENCE = "The Ivy League";
 
 // ---------- Helpers ----------
 
@@ -193,7 +228,9 @@ function hardFilterReason(profile: AthleteProfile, school: School): string | nul
     return "Most D1 programs are a stretch from a local-only profile";
   }
   if (school.tier === "elite" && profile.gpa < 3.55) return "GPA below typical range for elite programs";
-  if (school.tier === "elite" && ts !== null && ts < 1320) return "Test score below elite-program range";
+  if (school.tier === "elite" && ts !== null && ts < ELITE_SAT_FLOOR[school.athleticAdmissionsFlexibility]) {
+    return "Test score below elite-program range";
+  }
 
   // Division restriction: user picked 1-2 divisions, school must match
   if (profile.preferredDivisions.length > 0 && profile.preferredDivisions.length < 3) {
@@ -231,38 +268,64 @@ function athleticFitDim(profile: AthleteProfile, school: School): number {
   const player = playerLevel(profile);
   const demand = divisionDemand[school.division][school.tier];
   const gap = player - demand;
-  // Curve: at demand → 80; sweet spot +6 → 88 (peak); overqualified declines
-  // because the athlete would be underutilized. Below demand drops steeply.
+  // At demand → 85; sweet spot +6 → 92 (peak). An athlete who matches or
+  // slightly exceeds program demand should score very well, reflecting how
+  // coaches actually evaluate recruits. Overqualified declines slowly
+  // (underutilization), underqualified drops faster.
   let base: number;
-  if (gap < -15) base = 55 + (gap + 15) * 2.8;
-  else if (gap < 0) base = 80 + gap * 1.67;
-  else if (gap <= 6) base = 80 + gap * 1.33;
-  else if (gap <= 16) base = 88 - (gap - 6) * 0.5;
-  else base = 83 - (gap - 16) * 0.8;
+  if (gap >= 6) base = 92 - (gap - 6) * 0.5;
+  else if (gap >= 0) base = 85 + (gap / 6) * 7;
+  else if (gap >= -6) base = 85 + gap * 1.67; // 85 → 75 across -6
+  else if (gap >= -15) base = 75 + (gap + 6) * 1.5; // 75 → 61.5 across -9
+  else base = 61.5 + (gap + 15) * 2.8;
+  // Overqualified far past sweet spot tapers harder
+  if (gap > 16) base = 87 - (gap - 16) * 0.8;
   // Roster realism: high international intake at a level the athlete cannot reach
   if (school.internationalPercentage >= 35 && player < 74) base -= 6;
   else if (school.internationalPercentage >= 25 && player < 58) base -= 4;
   return clamp(base);
 }
 
-function academicFitDim(profile: AthleteProfile, school: School): number {
-  // At parity → 80; comfortably above → 90+ (academic safety); below → drops steeply.
-  const gpaGap = profile.gpa - school.avgGPA;
-  let gpaPart: number;
-  if (gpaGap >= 0) gpaPart = 80 + Math.min(gpaGap * 30, 12);
-  else if (gpaGap >= -0.4) gpaPart = 80 + gpaGap * 50;
-  else gpaPart = 60 + (gpaGap + 0.4) * 45;
+// Effective academic thresholds for an athletic recruit. Elite D1 programs
+// regularly admit athletes 150-250 SAT / 0.3-0.5 GPA below their published
+// average; the matching engine has to account for that or it filters out
+// legitimately recruitable kids (the original bug).
+const ACADEMIC_FLEX: Record<
+  School["athleticAdmissionsFlexibility"],
+  { satShift: number; gpaShift: number }
+> = {
+  high: { satShift: 250, gpaShift: 0.5 },
+  medium: { satShift: 120, gpaShift: 0.3 },
+  low: { satShift: 0, gpaShift: 0 },
+};
 
+function academicFitDim(profile: AthleteProfile, school: School): number {
+  const { satShift, gpaShift } = ACADEMIC_FLEX[school.athleticAdmissionsFlexibility];
+  const effectiveGPA = school.avgGPA - gpaShift;
+  const effectiveSAT = school.avgSAT - satShift;
+
+  // GPA curve relative to the effective threshold:
+  //   parity → 80, +0.5 above → 92, -0.3 below → ~65, more than -0.5 → <60.
+  const gpaGap = profile.gpa - effectiveGPA;
+  let gpaPart: number;
+  if (gpaGap >= 0) gpaPart = 80 + Math.min(gpaGap / 0.5, 1) * 12;
+  else if (gpaGap >= -0.3) gpaPart = 80 + (gpaGap / 0.3) * 15;
+  else if (gpaGap >= -0.5) gpaPart = 65 + ((gpaGap + 0.3) / 0.2) * 5;
+  else gpaPart = 60 + (gpaGap + 0.5) * 30;
+
+  // SAT curve relative to the effective threshold:
+  //   parity → 80, +150 above → 92, -150 below → ~65, more than -150 → <60.
   const ts = testScoreOf(profile);
   let testPart: number;
   if (ts === null) {
     testPart = 65;
   } else {
-    const testGap = ts - school.avgSAT;
-    if (testGap >= 0) testPart = 80 + Math.min(testGap / 25, 12);
-    else if (testGap >= -150) testPart = 80 + (testGap / 150) * 25;
-    else testPart = 55 + ((testGap + 150) / 100) * 20;
+    const testGap = ts - effectiveSAT;
+    if (testGap >= 0) testPart = 80 + Math.min(testGap / 150, 1) * 12;
+    else if (testGap >= -150) testPart = 65 + ((testGap + 150) / 150) * 15;
+    else testPart = 60 + ((testGap + 150) / 100) * 10;
   }
+
   return clamp(gpaPart * 0.55 + testPart * 0.45);
 }
 
@@ -328,7 +391,10 @@ function dragPenalty(d: ScoreBreakdown): number {
 }
 
 function composite(d: ScoreBreakdown): number {
-  const weighted = d.athleticFit * 0.42 + d.academicFit * 0.25 + d.campusFit * 0.18 + d.financialFit * 0.15;
+  // Athletic fit dominates because this is a recruiting tool, not a
+  // general college search. Academic is the second axis because Ivy/elite
+  // programs still need an admissible profile.
+  const weighted = d.athleticFit * 0.45 + d.academicFit * 0.28 + d.campusFit * 0.15 + d.financialFit * 0.12;
   return clamp(weighted - dragPenalty(d));
 }
 
@@ -406,9 +472,30 @@ function explanationsFor(profile: AthleteProfile, school: School, dims: ScoreBre
     out.push(`${school.division} program`);
   }
 
+  // Conference prestige signal
+  if (school.conference === IVY_CONFERENCE) {
+    out.push("Ivy League program — meets 100% of demonstrated financial need");
+  } else if (POWER_CONFERENCES.has(school.conference)) {
+    out.push("Power conference program");
+  } else if (STRONG_ACADEMIC_CONFERENCES.has(school.conference)) {
+    out.push("Strong academic conference");
+  }
+
+  // Athletic-admissions context — only surface when the athlete sits below
+  // the school's published academic averages but the school has real
+  // recruiting flexibility (Ivy/ACC/Big Ten/Patriot/etc.).
+  if (school.athleticAdmissionsFlexibility === "high") {
+    const ts = testScoreOf(profile);
+    const belowAvg =
+      profile.gpa < school.avgGPA || (ts !== null && ts < school.avgSAT);
+    if (belowAvg) {
+      out.push("Athletic admits typically reviewed separately from general admission");
+    }
+  }
+
   if (school.hbcu) out.push("HBCU");
 
-  return out.slice(0, 4);
+  return out.slice(0, 5);
 }
 
 // ---------- Layer 5: Diversity rerank ----------
