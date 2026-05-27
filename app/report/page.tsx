@@ -67,6 +67,9 @@ export default async function ReportPage() {
             <div>
               <div className="text-2xl font-black">Get Your Full Recruiting Report</div>
               <p className="mt-1 text-[var(--muted)]">One-time $10. No subscription.</p>
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                After payment you will fill out a short profile form so we can personalize your report.
+              </p>
             </div>
             {userId ? (
               <form action="/report/checkout" method="post">
